@@ -15,10 +15,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # No explicit version: pnpm/action-setup reads the `packageManager` field
+      # in package.json; pinning both places causes "Multiple versions" errors.
       - name: Install Pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 11.1.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

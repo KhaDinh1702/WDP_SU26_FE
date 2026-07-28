@@ -1,13 +1,13 @@
 /** Hàm format dùng chung toàn app - locale Việt Nam. */
 
-/** Định dạng tiền tệ VND, ví dụ 150000 -> "150.000 ₫". */
+/**
+ * Định dạng tiền tệ VND, ví dụ 150000 -> "150.000đ".
+ * Dùng chữ "đ" thường thay cho ký hiệu ₫ (glyph gạch chân khó đọc,
+ * người dùng phản ánh nhìn rối) — đổi ở đây là đổi toàn app.
+ */
 export function formatCurrency(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '-';
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-    maximumFractionDigits: 0,
-  }).format(value);
+  return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)}đ`;
 }
 
 /** Định dạng số có dấu phân cách hàng nghìn, ví dụ 15000 -> "15.000". */

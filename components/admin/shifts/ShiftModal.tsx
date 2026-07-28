@@ -15,11 +15,28 @@ type ShiftModalProps = {
   isPending?: boolean;
 };
 
+type CreateMode = 'single' | 'range';
+
 const fieldLabelCls =
   'block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5';
 const fieldCls =
   'w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-3 focus:ring-ring/30';
 const selectCls = `${fieldCls} cursor-pointer`;
+
+const MS_DAY = 24 * 60 * 60 * 1000;
+// Khớp guardrail BE (BulkCreateStaffShiftDto): khoảng tối đa 92 ngày.
+const MAX_RANGE_DAYS = 92;
+
+// Thứ theo ISO-8601 để khớp BE: Thứ Hai = 1 … Chủ Nhật = 7.
+const WEEKDAYS: Array<{ iso: number; label: string }> = [
+  { iso: 1, label: 'T2' },
+  { iso: 2, label: 'T3' },
+  { iso: 3, label: 'T4' },
+  { iso: 4, label: 'T5' },
+  { iso: 5, label: 'T6' },
+  { iso: 6, label: 'T7' },
+  { iso: 7, label: 'CN' },
+];
 
 // Giờ cố định của từng block (khớp BUSINESS_HOUR_WINDOWS phía BE).
 const BLOCK_HOURS: Record<'morning' | 'afternoon', { start: number; end: number }> = {
@@ -35,9 +52,34 @@ const isBlockEnded = (dateStr: string, block: 'morning' | 'afternoon') => {
   return end.getTime() <= Date.now();
 };
 
+/** Số ngày (inclusive) trong khoảng; 0 nếu ngày không hợp lệ hoặc from > to. */
+const rangeDayCount = (from: string, to: string): number => {
+  if (!from || !to) return 0;
+  const a = new Date(`${from}T00:00:00`).getTime();
+  const b = new Date(`${to}T00:00:00`).getTime();
+  const diff = Math.floor((b - a) / MS_DAY);
+  return diff < 0 ? 0 : diff + 1;
+};
+
+/** Số ngày thực sự được chọn sau khi lọc theo thứ trong tuần. */
+const countSelectedDays = (from: string, to: string, weekdays: number[]): number => {
+  const total = rangeDayCount(from, to);
+  if (total === 0 || weekdays.length === 0) return 0;
+  const base = new Date(`${from}T00:00:00`).getTime();
+  let count = 0;
+  for (let i = 0; i < total; i++) {
+    const dow = new Date(base + i * MS_DAY).getDay();
+    if (weekdays.includes(dow === 0 ? 7 : dow)) count += 1;
+  }
+  return count;
+};
+
 // Form tạo/sửa ca theo contract mới: { date, block, capacity?, note? }.
-// Ca không còn gắn nhân viên/trạm khi tạo — BE tự phân bổ.
+// Chế độ "Nhiều ngày" gửi { fromDate, toDate, block, weekdays, capacity?, note? }
+// tới POST /admin/shifts/bulk. Ca không gắn nhân viên/trạm khi tạo — BE tự phân bổ.
 export function ShiftModal({ item, onClose, onSave, isPending }: ShiftModalProps) {
+  const isEditing = !!item;
+
   const getBlockFromTimes = (
     startStr?: string,
     endStr?: string,
@@ -73,28 +115,49 @@ export function ShiftModal({ item, onClose, onSave, isPending }: ShiftModalProps
 
   const initialCapacity = item?.capacity ?? item?.maxBookings;
 
+  // Chế độ tạo: chỉ cho chọn khi tạo mới (sửa ca luôn là 1 ngày).
+  const [mode, setMode] = useState<CreateMode>('single');
+
   const [form, setForm] = useState({
     date: formatDateForInput(item?.startAt) || today,
+    fromDate: today,
+    toDate: today,
+    weekdays: WEEKDAYS.map((w) => w.iso), // mặc định chọn tất cả các thứ
     block: defaultBlock,
     capacity: typeof initialCapacity === 'number' ? String(initialCapacity) : '',
     note: item?.note ?? '',
   });
 
-  const minDate = !item ? formatDateForInput(new Date().toISOString()) : undefined;
+  const minDate = !item ? today : undefined;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const toggleWeekday = (iso: number) => {
+    setForm((f) => ({
+      ...f,
+      weekdays: f.weekdays.includes(iso)
+        ? f.weekdays.filter((d) => d !== iso)
+        : [...f.weekdays, iso].sort((a, b) => a - b),
+    }));
+  };
+
+  /** Đọc + validate sức chứa dùng chung cho cả hai chế độ. undefined = bỏ trống. */
+  const parseCapacity = (): { ok: boolean; value?: number } => {
+    const raw = form.capacity.trim();
+    if (raw === '') return { ok: true, value: undefined };
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 1) {
+      toast.error('Sức chứa phải là số nguyên dương.');
+      return { ok: false };
+    }
+    return { ok: true, value };
+  };
+
+  const handleSubmitSingle = () => {
     if (!form.date) {
       toast.error('Vui lòng chọn ngày làm việc.');
       return;
     }
-
-    const capacityRaw = form.capacity.trim();
-    const capacity = capacityRaw === '' ? undefined : Number(capacityRaw);
-    if (capacity !== undefined && (!Number.isInteger(capacity) || capacity < 1)) {
-      toast.error('Sức chứa phải là số nguyên dương.');
-      return;
-    }
+    const capacity = parseCapacity();
+    if (!capacity.ok) return;
 
     // Chặn tạo ca cho block đã kết thúc (BE cũng chặn từng block, all-or-nothing).
     const blocksToCheck: Array<'morning' | 'afternoon'> =
@@ -112,10 +175,49 @@ export function ShiftModal({ item, onClose, onSave, isPending }: ShiftModalProps
     onSave({
       date: form.date,
       block: form.block,
-      ...(capacity !== undefined ? { capacity } : {}),
+      ...(capacity.value !== undefined ? { capacity: capacity.value } : {}),
       note: form.note,
     });
   };
+
+  const handleSubmitRange = () => {
+    if (!form.fromDate || !form.toDate) {
+      toast.error('Vui lòng chọn ngày bắt đầu và ngày kết thúc.');
+      return;
+    }
+    if (form.fromDate > form.toDate) {
+      toast.error('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.');
+      return;
+    }
+    if (rangeDayCount(form.fromDate, form.toDate) > MAX_RANGE_DAYS) {
+      toast.error(`Khoảng ngày tối đa ${MAX_RANGE_DAYS} ngày. Vui lòng chia nhỏ.`);
+      return;
+    }
+    if (form.weekdays.length === 0) {
+      toast.error('Chọn ít nhất một thứ trong tuần.');
+      return;
+    }
+    const capacity = parseCapacity();
+    if (!capacity.ok) return;
+
+    // Ngày trùng ca cũ hoặc đã qua giờ sẽ được BE bỏ qua và báo lại — không chặn ở client.
+    onSave({
+      fromDate: form.fromDate,
+      toDate: form.toDate,
+      block: form.block,
+      weekdays: form.weekdays,
+      ...(capacity.value !== undefined ? { capacity: capacity.value } : {}),
+      note: form.note,
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isEditing && mode === 'range') handleSubmitRange();
+    else handleSubmitSingle();
+  };
+
+  const selectedDays = countSelectedDays(form.fromDate, form.toDate, form.weekdays);
 
   return (
     <div
@@ -141,18 +243,112 @@ export function ShiftModal({ item, onClose, onSave, isPending }: ShiftModalProps
           </button>
         </div>
 
-        <div className='flex flex-col gap-4'>
-          {/* Ngày trực */}
-          <div>
-            <label className={fieldLabelCls}>Ngày làm việc</label>
-            <input
-              type='date'
-              min={minDate}
-              value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-              className={fieldCls}
-            />
+        {/* Chọn chế độ tạo (chỉ khi tạo mới) */}
+        {!isEditing && (
+          <div className='grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1'>
+            {(
+              [
+                { key: 'single', label: 'Một ngày' },
+                { key: 'range', label: 'Nhiều ngày' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.key}
+                type='button'
+                onClick={() => setMode(opt.key)}
+                className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  mode === opt.key
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
+        )}
+
+        <div className='flex flex-col gap-4'>
+          {/* Ngày làm việc — một ngày */}
+          {(isEditing || mode === 'single') && (
+            <div>
+              <label className={fieldLabelCls}>Ngày làm việc</label>
+              <input
+                type='date'
+                min={minDate}
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className={fieldCls}
+              />
+            </div>
+          )}
+
+          {/* Khoảng ngày — nhiều ngày */}
+          {!isEditing && mode === 'range' && (
+            <>
+              <div className='grid grid-cols-2 gap-3'>
+                <div>
+                  <label className={fieldLabelCls}>Từ ngày</label>
+                  <input
+                    type='date'
+                    min={today}
+                    value={form.fromDate}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        fromDate: e.target.value,
+                        // Kéo toDate theo nếu đang nhỏ hơn fromDate.
+                        toDate:
+                          f.toDate && f.toDate < e.target.value
+                            ? e.target.value
+                            : f.toDate,
+                      }))
+                    }
+                    className={fieldCls}
+                  />
+                </div>
+                <div>
+                  <label className={fieldLabelCls}>Đến ngày</label>
+                  <input
+                    type='date'
+                    min={form.fromDate || today}
+                    value={form.toDate}
+                    onChange={(e) => setForm({ ...form, toDate: e.target.value })}
+                    className={fieldCls}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className={fieldLabelCls}>Áp dụng cho các thứ</label>
+                <div className='flex flex-wrap gap-1.5'>
+                  {WEEKDAYS.map((w) => {
+                    const active = form.weekdays.includes(w.iso);
+                    return (
+                      <button
+                        key={w.iso}
+                        type='button'
+                        onClick={() => toggleWeekday(w.iso)}
+                        aria-pressed={active}
+                        className={`min-w-10 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          active
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-card text-muted-foreground hover:border-ring hover:text-foreground'
+                        }`}
+                      >
+                        {w.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className='mt-1 text-[11px] text-muted-foreground'>
+                  {selectedDays > 0
+                    ? `Sẽ tạo ca cho ${selectedDays} ngày. Ngày đã có ca hoặc đã qua giờ sẽ được bỏ qua.`
+                    : 'Chọn khoảng ngày và ít nhất một thứ trong tuần.'}
+                </p>
+              </div>
+            </>
+          )}
 
           {/* Ca làm (block) */}
           <div>
@@ -167,17 +363,27 @@ export function ShiftModal({ item, onClose, onSave, isPending }: ShiftModalProps
               }
               className={selectCls}
             >
-              <option value='morning' disabled={isBlockEnded(form.date, 'morning')}>
+              {/* Ở chế độ nhiều ngày, không disable theo "đã qua" của hôm nay — BE bỏ qua từng ngày. */}
+              <option
+                value='morning'
+                disabled={mode === 'single' && isBlockEnded(form.date, 'morning')}
+              >
                 Sáng (08:00 – 12:00)
-                {isBlockEnded(form.date, 'morning') ? ' — đã qua' : ''}
+                {mode === 'single' && isBlockEnded(form.date, 'morning') ? ' — đã qua' : ''}
               </option>
-              <option value='afternoon' disabled={isBlockEnded(form.date, 'afternoon')}>
+              <option
+                value='afternoon'
+                disabled={mode === 'single' && isBlockEnded(form.date, 'afternoon')}
+              >
                 Chiều (14:00 – 17:00)
-                {isBlockEnded(form.date, 'afternoon') ? ' — đã qua' : ''}
+                {mode === 'single' && isBlockEnded(form.date, 'afternoon') ? ' — đã qua' : ''}
               </option>
-              <option value='fullday' disabled={isBlockEnded(form.date, 'morning')}>
+              <option
+                value='fullday'
+                disabled={mode === 'single' && isBlockEnded(form.date, 'morning')}
+              >
                 Cả ngày (08:00 – 12:00 & 14:00 – 17:00)
-                {isBlockEnded(form.date, 'morning') ? ' — sáng đã qua' : ''}
+                {mode === 'single' && isBlockEnded(form.date, 'morning') ? ' — sáng đã qua' : ''}
               </option>
             </select>
             <p className='mt-1 text-[11px] text-muted-foreground'>
@@ -222,7 +428,7 @@ export function ShiftModal({ item, onClose, onSave, isPending }: ShiftModalProps
           </Button>
           <Button type='submit' className='flex-1' disabled={isPending}>
             {isPending && <Spinner />}
-            Lưu ca làm việc
+            {!isEditing && mode === 'range' ? 'Tạo ca hàng loạt' : 'Lưu ca làm việc'}
           </Button>
         </div>
       </form>

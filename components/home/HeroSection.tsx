@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ChevronDown } from 'lucide-react';
@@ -14,47 +14,42 @@ export function HeroSection() {
   };
 
   return (
-    <section className='relative w-full pt-16 bg-[#0A1628] overflow-hidden'>
-      {/* Full-width Maserati image */}
-      <div className='relative w-full aspect-[16/7] min-h-[480px] md:min-h-[560px] bg-[#0A1628]'>
-        <Image
-          src='/hero-maserati.png'
-          alt='Maserati Detailing'
-          fill
-          priority
-          sizes='100vw'
-          className='object-cover object-right md:object-center'
-        />
-
-        {/* Gradient overlay - fade from left to dark background for readable text */}
-        <div className='absolute inset-0 bg-gradient-to-r from-[#0A1628]/95 via-[#0A1628]/60 to-transparent' />
-        <div className='absolute inset-0 bg-gradient-to-t from-[#0A1628] via-transparent to-transparent opacity-80' />
-
-        {/* Text + CTA aligned to the LEFT */}
-        <div className='absolute inset-0 flex flex-col items-start justify-center text-left px-6 sm:px-12 md:px-20 max-w-3xl gap-5 z-10'>
-          <p className='text-white text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight drop-shadow-md'>
+    <section className='w-full pt-24 pb-12 lg:pt-32 lg:pb-20 bg-white overflow-hidden'>
+      <div className='max-w-7xl mx-auto px-6 sm:px-12 flex flex-col lg:flex-row items-center gap-12 lg:gap-16'>
+        {/* Text Area */}
+        <div className='w-full lg:w-[45%] flex flex-col items-start justify-center text-left gap-6 z-10 shrink-0'>
+          <h2 className='font-heading text-[1.75rem] sm:text-4xl lg:text-5xl text-foreground leading-tight tracking-tight'>
             Xe sạch từng góc nhỏ {' '}
             <br className='hidden sm:inline' />
-            <span className='text-sky-400'>Chỉ mất vài phút.</span>
-          </p>
-          <p className='text-slate-300 text-sm sm:text-base max-w-lg font-medium leading-relaxed drop-shadow-xs'>
+            <span className='bg-linear-to-r from-primary via-purple-500 to-fuchsia-500 bg-clip-text text-transparent'>Chỉ mất vài phút.</span>
+          </h2>
+          <p className='text-slate-600 text-base lg:text-lg max-w-lg font-medium leading-relaxed'>
             Dịch vụ rửa xe chuyên nghiệp tiêu chuẩn cao cấp. Đặt lịch nhanh, nhận xe đúng giờ, bảo đảm chất lượng.
           </p>
-          <div className='flex flex-wrap items-center gap-3 pt-1'>
+          <div className='flex flex-wrap items-center gap-4 pt-2'>
             <button
               onClick={handleBooking}
-              className='inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-7 py-3.5 rounded-xl shadow-lg shadow-sky-500/30 transition-all text-sm cursor-pointer'
+              className='inline-flex items-center gap-2 bg-primary hover:bg-sky-400 text-white font-bold px-8 py-3.5 rounded-xl shadow-lg shadow-sky-500/20 transition-all text-sm cursor-pointer'
             >
               Đặt lịch ngay
             </button>
-            <button
-              onClick={() => document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })}
-              className='inline-flex items-center gap-2 border border-white/30 bg-white/10 hover:bg-white/20 text-white font-semibold px-7 py-3.5 rounded-xl text-sm backdrop-blur-sm transition-all cursor-pointer'
-            >
-              Tìm hiểu thêm
-              <ChevronDown className='w-4 h-4' />
-            </button>
           </div>
+        </div>
+
+        {/* Video Area */}
+        <div className='w-full lg:w-[55%] relative z-10'>
+          <div className='relative w-full aspect-[16/10] sm:aspect-video rounded-3xl overflow-hidden border-8 border-slate-50 shadow-2xl ring-1 ring-slate-200/50 bg-slate-100'>
+            <video
+              src='/carwash.mp4'
+              autoPlay
+              loop
+              muted
+              playsInline
+              className='w-full h-full object-cover object-center'
+            />
+          </div>
+          {/* Decorative background blob */}
+          <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[110%] bg-gradient-to-tr from-sky-100 to-blue-50 rounded-full blur-3xl -z-10 opacity-70' />
         </div>
       </div>
     </section>

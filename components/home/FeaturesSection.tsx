@@ -89,12 +89,6 @@ export function FeaturesSection() {
               </p>
             </div>
             <div className='flex-1 min-h-[20rem] rounded-2xl border border-primary/5 relative overflow-hidden'>
-              <div className='absolute bottom-2 left-4 right-4 h-12 bg-white rounded-xl shadow-lg border border-border/50 flex items-center px-4 gap-3 animate-float z-10'>
-                <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse' />
-                <span className='text-[10px] font-semibold uppercase tracking-widest text-foreground/40'>
-                  Live Booking Enabled
-                </span>
-              </div>
               <Image
                 fill
                 sizes='(max-width: 1024px) 100vw, 50vw'

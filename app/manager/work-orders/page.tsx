@@ -5,7 +5,7 @@ import {
   adminGetWorkOrders,
   adminAssignWasher,
   adminGetWorkOrdersQueue,
-  adminGetShiftStaff
+  adminGetWasherStatus,
 } from '@/lib/admin-api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSocketEvent } from '@/hooks/useSocketEvent';
@@ -26,6 +26,8 @@ interface UserData {
   name?: string;
   email?: string;
   role?: string;
+  /** Trạng thái live từ /admin/shifts/washer-status: free | assigned | in_progress. */
+  status?: string;
 }
 
 interface WorkOrderData {
@@ -110,36 +112,12 @@ export default function ManagerWorkOrdersPage() {
     enabled: statusFilter === 'fifo',
   });
 
-  // Lấy danh sách thợ rửa xe
+  // Danh sách thợ THẬT từ /admin/shifts/washer-status (kèm trạng thái bận/rảnh).
+  // Không dùng dữ liệu cứng dự phòng — BE trả gì hiển thị nấy.
   const { data: washersRes } = useQuery({
-    queryKey: ['admin-washers'],
-    queryFn: async () => {
-      const res = await adminGetShiftStaff();
-      const staff = res.data || [];
-      return {
-        data: staff.filter((s: { role: string }) => s.role === 'washer')
-      };
-    },
+    queryKey: ['washer-status'],
+    queryFn: () => adminGetWasherStatus(),
   });
-
-  const FALLBACK_WASHERS: UserData[] = [
-    {
-      _id: "6a069f4666ba32cfd229da66",
-      id: "6a069f4666ba32cfd229da66",
-      fullName: "Default Washer",
-      name: "Default Washer",
-      email: "washer@washauto.local",
-      role: "washer"
-    },
-    {
-      _id: "6a070891165edfd36ae6e89b",
-      id: "6a070891165edfd36ae6e89b",
-      fullName: "Test Staff 1778845840",
-      name: "Test Staff 1778845840",
-      email: "staff1778845840@test.local",
-      role: "washer"
-    }
-  ];
 
   const allWorkOrders: WorkOrderData[] = useMemo(
     () => workOrdersRes?.data?.data ?? workOrdersRes?.data ?? [],
@@ -149,8 +127,18 @@ export default function ManagerWorkOrdersPage() {
     () => fifoQueueRes?.data ?? [],
     [fifoQueueRes],
   );
-  const fetchedWashers: UserData[] = washersRes?.data?.data ?? washersRes?.data ?? [];
-  const washers = fetchedWashers.length > 0 ? fetchedWashers : FALLBACK_WASHERS;
+  const washers: UserData[] = useMemo(
+    () =>
+      (washersRes?.data ?? []).map((w) => ({
+        _id: w.washerId,
+        id: w.washerId,
+        name: w.name,
+        email: w.email,
+        role: 'washer',
+        status: w.status,
+      })),
+    [washersRes],
+  );
 
   const isPageLoading = statusFilter === 'fifo' ? isLoadingFIFO : isLoadingWO;
   const refetch = () => {
@@ -161,22 +149,12 @@ export default function ManagerWorkOrdersPage() {
     }
   };
 
-  // Thợ đang bận = đang được giao việc hoặc đang rửa.
-  // Những thợ này không hiện trong danh sách để gán tiếp.
-  const availableWashers = useMemo(() => {
-    const busyIds = new Set(
-      allWorkOrders
-        .filter(
-          (wo) =>
-            wo.status === 'assigned' || wo.status === 'in_progress',
-        )
-        .map((wo) => wo.assignedWasherId)
-        .filter((id): id is string => Boolean(id)),
-    );
-    return washers.filter(
-      (w) => !busyIds.has(w._id) && !busyIds.has(w.id ?? ''),
-    );
-  }, [allWorkOrders, washers]);
+  // Chỉ gán được thợ đang rảnh — trạng thái lấy thẳng từ BE (washer-status),
+  // không suy diễn phía client nữa.
+  const availableWashers = useMemo(
+    () => washers.filter((w) => w.status === 'free'),
+    [washers],
+  );
 
   // Lọc phiếu rửa xe theo trạng thái ở frontend để khớp tab
   const workOrders = useMemo(() => {
@@ -255,7 +233,7 @@ export default function ManagerWorkOrdersPage() {
                   {tab === 'all' && 'Tất cả phiếu'}
                   {tab === 'pending' && 'Chờ giao thợ'}
                   {tab === 'in_progress' && 'Đang rửa xe'}
-                  {tab === 'fifo' && 'Hàng đợi FIFO (Hôm nay)'}
+                  {tab === 'fifo' && 'Xe chờ tới lượt (Hôm nay)'}
                   
                   {statusFilter === tab && (
                     <div className='absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full' />

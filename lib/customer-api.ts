@@ -2,13 +2,10 @@ import { axiosInstance } from '@/lib/axios';
 import { ENDPOINTS } from '@/services/endpoints';
 import type {
   AuthResponse,
-  ChangeMyPasswordDto,
   ForgotPasswordDto,
   GoogleLoginDto,
   MessageResponse,
   ResetPasswordDto,
-  UpdateProfileDto,
-  User,
 } from '@/types/auth';
 import type {
   Voucher,
@@ -56,8 +53,10 @@ export const setDefaultVehicle = (id: string) =>
 // ─── Loyalty & Tiers (Customer) ─────────────────────────
 export const getMyLoyalty = () => axiosInstance.get(ENDPOINTS.loyalty.mine);
 
-export const getMyLoyaltyTransactions = () =>
-  axiosInstance.get(ENDPOINTS.loyalty.transactions);
+export const getMyLoyaltyTransactions = (page = 1, limit = 100) =>
+  axiosInstance.get(ENDPOINTS.loyalty.transactions, {
+    params: { page, limit },
+  });
 
 // ─── Vouchers (Customer) ───────────────────────────────
 /** GET /me/vouchers — trả MẢNG voucher (không phân trang), campaign nhúng sẵn. */
@@ -156,16 +155,9 @@ export const forgotPassword = (data: ForgotPasswordDto) =>
 export const resetPassword = (data: ResetPasswordDto) =>
   axiosInstance.post<MessageResponse>(ENDPOINTS.auth.resetPassword, data);
 
-// ─── Profile (mọi vai trò đã đăng nhập) ─────────────────
-export const getMyProfile = () =>
-  axiosInstance.get<User>(ENDPOINTS.profile.me);
-
-/** PATCH /me/profile — mọi field tuỳ chọn. 409 = số điện thoại đã có người dùng. */
-export const updateMyProfile = (data: UpdateProfileDto) =>
-  axiosInstance.patch<User>(ENDPOINTS.profile.me, data);
-
-export const changeMyPassword = (data: ChangeMyPasswordDto) =>
-  axiosInstance.post<MessageResponse>(ENDPOINTS.profile.changePassword, data);
+// ─── Profile ────────────────────────────────────────────
+// GET/PATCH /me/profile và POST /me/profile/change-password nằm ở
+// `@/lib/profile-api` để tránh hai nguồn sự thật.
 
 // ─── Service Types (Public) ────────────────────────────
 export const getActiveServiceTypes = () => axiosInstance.get('/service-types');

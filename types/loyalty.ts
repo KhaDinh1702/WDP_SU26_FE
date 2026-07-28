@@ -43,16 +43,15 @@ export interface LoyaltyAccount {
 
 export type LoyaltyTransactionType =
   | 'earn_completed'
-  | 'earn_pending'
-  | 'redeem_voucher'
-  | 'tier_change'
-  | 'expire'
-  | 'adjust';
+  | 'deduct_no_show'
+  | 'annual_reset'
+  | 'voucher_granted'
+  | 'tier_changed';
 
 export interface LoyaltyTransaction {
   id: string;
   customerId: string;
-  type: LoyaltyTransactionType | string;
+  type: LoyaltyTransactionType;
   pointsDelta: number;
   balanceAfter: number;
   orderId?: string;

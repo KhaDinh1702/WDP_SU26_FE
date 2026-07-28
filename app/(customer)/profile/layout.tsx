@@ -8,17 +8,17 @@ export default function ProfileLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className='min-h-screen bg-[#F5F5F5] dark:bg-background transition-colors duration-300'>
+    <div className='min-h-screen bg-muted/30 transition-colors duration-300'>
       <Navbar />
-      <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12'>
-        <div className='grid grid-cols-1 md:grid-cols-12 gap-8'>
+      <div className='mx-auto max-w-[1440px] px-4 pb-12 pt-20 sm:px-6 lg:px-8 lg:pb-16 lg:pt-24'>
+        <div className='grid grid-cols-1 gap-6 md:grid-cols-[220px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[240px_minmax(0,1fr)]'>
           {/* Sidebar */}
-          <aside className='md:col-span-3'>
+          <aside className='min-w-0 md:sticky md:top-24 md:self-start'>
             <ProfileSidebar />
           </aside>
 
           {/* Main Content */}
-          <main className='md:col-span-9'>{children}</main>
+          <main className='min-w-0'>{children}</main>
         </div>
       </div>
     </div>

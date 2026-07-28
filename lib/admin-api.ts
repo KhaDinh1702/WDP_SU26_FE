@@ -17,6 +17,7 @@ import type {
   VoucherStats,
   VoucherStatus,
 } from '@/types/voucher';
+import type { WasherLiveStatus } from '@/types/washer';
 
 // ─── Auth ──────────────────────────────────────────────
 export const adminGetMe = () => axiosInstance.get('/auth/me');
@@ -52,6 +53,10 @@ export const adminUpdateUserStatus = (id: string, isActive: boolean) =>
 
 export const adminResetUserPassword = (id: string, newPassword: string) =>
   axiosInstance.post(`/admin/users/${id}/reset-password`, { newPassword });
+
+// ─── Giám sát thợ (Manager/Admin) ───────────────────────
+export const adminGetWasherStatus = () =>
+  axiosInstance.get<WasherLiveStatus[]>(ENDPOINTS.adminShifts.washerStatus);
 
 // ─── Orders/Bookings (Manager) ──────────────────────────
 export const adminGetOrders = (params?: Record<string, unknown>) =>
@@ -112,12 +117,37 @@ export const adminToggleTierConfig = (id: string, isActive: boolean) =>
 export const adminGetShifts = (params?: Record<string, unknown>) =>
   axiosInstance.get('/admin/shifts', { params });
 
-// Active washers + cashiers assignable to a shift (manager + admin allowed).
-export const adminGetShiftStaff = () =>
-  axiosInstance.get('/admin/shifts/staff');
+// GET /admin/shifts/staff đã bị BE xoá khi chuyển sang ca ẩn danh —
+// danh sách thợ lấy qua adminGetWasherStatus.
 
 export const adminCreateShift = (data: Record<string, unknown>) =>
   axiosInstance.post('/admin/shifts', data);
+
+/** Tạo ca cho một khoảng ngày trong 1 lần — POST /admin/shifts/bulk. */
+export interface BulkCreateShiftPayload {
+  /** YYYY-MM-DD (giờ VN, inclusive). */
+  fromDate: string;
+  /** YYYY-MM-DD (giờ VN, inclusive). Khoảng tối đa 92 ngày. */
+  toDate: string;
+  block: 'morning' | 'afternoon' | 'fullday';
+  /** Thứ theo ISO: T2=1 … CN=7. Bỏ trống = mọi thứ. */
+  weekdays?: number[];
+  capacity?: number;
+  note?: string;
+}
+
+export interface BulkCreateShiftResult {
+  created: unknown[];
+  skipped: Array<{
+    date: string;
+    block: 'morning' | 'afternoon';
+    reason: 'overlap' | 'past';
+  }>;
+  meta: { requestedDays: number; createdCount: number; skippedCount: number };
+}
+
+export const adminBulkCreateShifts = (data: BulkCreateShiftPayload) =>
+  axiosInstance.post<BulkCreateShiftResult>(ENDPOINTS.adminShifts.bulk, data);
 
 export const adminUpdateShift = (id: string, data: Record<string, unknown>) =>
   axiosInstance.patch(`/admin/shifts/${id}`, data);

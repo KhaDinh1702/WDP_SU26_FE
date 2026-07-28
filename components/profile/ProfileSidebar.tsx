@@ -11,6 +11,7 @@ import {
   Car,
   History,
   CalendarClock,
+  ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -68,74 +69,123 @@ export default function ProfileSidebar() {
   const activeHref = allHrefs
     .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
     .sort((a, b) => b.length - a.length)[0];
+  const activeItem = menuGroups
+    .flatMap((group) => group.items)
+    .find((item) => item.href === activeHref) ?? menuGroups[0].items[0];
+  const ActiveIcon = activeItem.icon;
+
+  const userSummary = (
+    <div className='flex min-w-0 items-center gap-3'>
+      <div className='flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/10 bg-primary/10 font-bold text-primary'>
+        {authUser?.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={authUser.avatarUrl}
+            alt={authUser.name}
+            className='h-full w-full object-cover'
+          />
+        ) : (
+          <span>{initials}</span>
+        )}
+      </div>
+      <div className='flex min-w-0 flex-col'>
+        <span className='truncate font-heading font-bold capitalize text-foreground'>
+          {authUser?.name || 'Người dùng'}
+        </span>
+        <Link
+          href='/profile'
+          className='text-xs font-semibold text-primary underline-offset-2 hover:underline'
+        >
+          Xem hồ sơ
+        </Link>
+      </div>
+    </div>
+  );
 
   return (
-    <div className='flex flex-col gap-5'>
-      {/* User Summary */}
-      <div className='flex items-center gap-3 px-2'>
-        <div className='w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden border border-border shrink-0'>
-          {authUser?.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={authUser.avatarUrl}
-              alt={authUser.name}
-              className='w-full h-full object-cover'
-            />
-          ) : (
-            <span>{initials}</span>
-          )}
-        </div>
-        <div className='flex flex-col min-w-0'>
-          <span className='font-heading font-bold text-foreground truncate capitalize'>
-            {authUser?.name || 'Người dùng'}
-          </span>
-          <Link
-            href='/profile'
-            className='text-xs font-semibold text-primary hover:underline underline-offset-2'
-          >
-            Xem hồ sơ
-          </Link>
-        </div>
-      </div>
-
-      {/* Menu theo nhóm */}
-      <nav className='space-y-5' aria-label='Menu tài khoản'>
-        {menuGroups.map((group) => (
-          <div key={group.heading}>
-            <p className='px-3 mb-1 text-[11px] font-bold uppercase tracking-wider text-placeholder select-none'>
-              {group.heading}
-            </p>
-            <ul className='space-y-0.5'>
-              {group.items.map((item) => {
+    <>
+      {/* Mobile: giữ điều hướng gọn thay vì đẩy nội dung xuống gần một màn hình. */}
+      <div className='overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_12px_35px_-28px_rgba(30,58,138,0.45)] md:hidden'>
+        <div className='p-4'>{userSummary}</div>
+        <details className='group border-t border-border/60'>
+          <summary className='flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden'>
+            <span className='flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary'>
+              <ActiveIcon className='size-4' />
+            </span>
+            <span className='min-w-0 flex-1 truncate'>{activeItem.label}</span>
+            <span className='text-xs font-medium text-muted-foreground'>
+              Chuyển mục
+            </span>
+            <ChevronDown className='size-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180' />
+          </summary>
+          <nav className='grid gap-1 px-2 pb-2' aria-label='Menu tài khoản di động'>
+            {menuGroups.flatMap((group) =>
+              group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.href === activeHref;
                 return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={cn(
-                        'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
-                        isActive
-                          ? 'bg-primary/10 text-primary font-bold'
-                          : 'text-muted-foreground font-medium hover:bg-accent/50 hover:text-foreground',
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          'w-4 h-4 shrink-0',
-                          isActive ? 'text-primary' : 'text-muted-foreground',
-                        )}
-                      />
-                      {item.label}
-                    </Link>
-                  </li>
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                      isActive
+                        ? 'bg-primary/10 font-semibold text-primary'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    <Icon className='size-4 shrink-0' />
+                    {item.label}
+                  </Link>
                 );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
-    </div>
+              }),
+            )}
+          </nav>
+        </details>
+      </div>
+
+      {/* Desktop sidebar */}
+      <div className='hidden flex-col gap-6 md:flex'>
+        <div className='px-2'>{userSummary}</div>
+        <nav className='space-y-5' aria-label='Menu tài khoản'>
+          {menuGroups.map((group) => (
+            <div key={group.heading}>
+              <p className='mb-1 px-3 text-[11px] font-bold uppercase tracking-wider text-placeholder select-none'>
+                {group.heading}
+              </p>
+              <ul className='space-y-0.5'>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = item.href === activeHref;
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={cn(
+                          'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                          isActive
+                            ? 'bg-primary/10 font-bold text-primary'
+                            : 'font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            'size-4 shrink-0',
+                            isActive ? 'text-primary' : 'text-muted-foreground',
+                          )}
+                        />
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+      </div>
+    </>
   );
 }

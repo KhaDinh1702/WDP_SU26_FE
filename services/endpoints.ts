@@ -99,10 +99,11 @@ export const ENDPOINTS = {
   adminShifts: {
     list: '/admin/shifts',
     create: '/admin/shifts',
+    bulk: '/admin/shifts/bulk',
     byId: (id: string) => `/admin/shifts/${id}`,
     status: (id: string) => `/admin/shifts/${id}/status`,
-    staff: '/admin/shifts/staff',
     staffStats: '/admin/shifts/staff-stats',
+    washerStatus: '/admin/shifts/washer-status',
   },
   loyalty: {
     mine: '/me/loyalty',
@@ -190,6 +191,11 @@ export const ENDPOINTS = {
   adminFeedback: {
     list: '/admin/feedback',
     washerSummary: (washerId: string) => `/admin/feedback/washers/${washerId}/summary`,
+  },
+  /** Đánh giá về chính thợ đang đăng nhập - BE `WasherFeedbackController`. */
+  washerFeedback: {
+    list: '/me/washer-feedback',
+    summary: '/me/washer-feedback/summary',
   },
   upload: {
     image: '/upload/image',

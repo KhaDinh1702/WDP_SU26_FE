@@ -19,15 +19,15 @@ const CHECKLIST = [
 
 export function AboutSection() {
   return (
-    <section id='about' className='py-16 sm:py-24 bg-background'>
+    <section id='about' className='py-8 sm:py-16 bg-background'>
       <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
 
         {/* Header */}
-        <div className='mb-12 sm:mb-16'>
+        <div className='mb-8 sm:mb-12'>
           <p className='text-xs uppercase font-bold tracking-[0.3em] text-primary mb-3'>
             Về chúng tôi
           </p>
-          <h2 className='text-3xl sm:text-4xl lg:text-5xl font-extrabold text-foreground leading-tight tracking-tight max-w-xl'>
+          <h2 className='font-heading text-[1.75rem] sm:text-4xl lg:text-5xl text-foreground leading-tight tracking-tight'>
             Câu chuyện <span className='text-primary'>WAVE</span>
           </h2>
         </div>

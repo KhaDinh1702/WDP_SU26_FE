@@ -3,10 +3,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, ChevronLeft } from 'lucide-react';
+import { LogOut, ChevronLeft, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { axiosInstance } from '@/lib/axios';
+import { AccountDialog } from '@/components/profile/AccountDialog';
 import { SIDEBAR_CONFIG } from './sidebar-config';
 
 type Props = {
@@ -17,6 +18,7 @@ export function AppSidebar({ role }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const { setAccessToken, setUser, authUser } = useAuthStore();
   const config = SIDEBAR_CONFIG[role];
 
@@ -44,7 +46,7 @@ export function AppSidebar({ role }: Props) {
 
   return (
     <aside
-      className={`sticky top-0 h-screen self-start flex flex-col bg-sidebar text-sidebar-foreground transition-all duration-300 shrink-0 border-r border-sidebar-border ${
+      className={`sticky top-0 z-30 h-screen self-start flex flex-col bg-sidebar text-sidebar-foreground transition-all duration-300 shrink-0 border-r border-sidebar-border ${
         collapsed ? 'w-[72px]' : 'w-64'
       }`}
     >
@@ -112,7 +114,12 @@ export function AppSidebar({ role }: Props) {
       {/* Profile info + Logout */}
       <div className='px-3 py-4 border-t border-sidebar-border flex flex-col gap-2'>
         {!collapsed && authUser && (
-          <div className='flex items-center gap-3 px-3 py-2.5 rounded-lg bg-sidebar-accent'>
+          <button
+            type='button'
+            onClick={() => setAccountOpen(true)}
+            title='Sửa hồ sơ của tôi'
+            className='flex items-center gap-3 px-3 py-2.5 rounded-lg bg-sidebar-accent w-full text-left group hover:ring-1 hover:ring-border transition-shadow'
+          >
             <div
               className={`w-8 h-8 rounded-full ${config.avatarClass} flex items-center justify-center text-primary-foreground font-semibold text-xs shrink-0`}
             >
@@ -126,8 +133,10 @@ export function AppSidebar({ role }: Props) {
                 {authUser.email}
               </p>
             </div>
-          </div>
+            <Pencil className='w-3.5 h-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity' />
+          </button>
         )}
+        <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
 
         <button
           onClick={handleLogout}
