@@ -11,16 +11,17 @@ import { getRoleHome } from '@/constants';
 function LoginPage() {
   const router = useRouter();
   const login = useLogin();
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
-  const setUser = useAuthStore((s) => s.setUser);
+  const setSession = useAuthStore((s) => s.setSession);
 
   const handleSubmit = async (data: LoginFormData): Promise<void> => {
     login.mutate(data, {
+      // POST /auth/login → `AuthResponse` { accessToken, refreshToken, user }.
       onSuccess: (res) => {
-        setAccessToken(res.accessToken);
-        setRefreshToken(res.refreshToken);
-        setUser(res.user);
+        setSession({
+          accessToken: res.accessToken,
+          refreshToken: res.refreshToken,
+          user: res.user,
+        });
         router.replace(getRoleHome(res.user?.role));
         toast.success('Đăng nhập thành công!');
       },

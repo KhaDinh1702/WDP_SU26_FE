@@ -9,7 +9,14 @@ import { useVouchers } from '@/hooks/vouchers/useVouchers';
 import { useClaimVoucher } from '@/hooks/vouchers/useClaimVoucher';
 import { getErrorMessage } from '@/lib/getErrorMessage';
 import { Voucher, VoucherStatus } from '@/types/voucher';
-import { formatCurrency, formatDate } from '@/lib/format';
+import {
+  VOUCHER_STATUS_META,
+  effectiveVoucherStatus,
+  voucherBenefitLabel,
+  voucherMinOrderLabel,
+  voucherTitle,
+} from '@/lib/voucher';
+import { formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -17,32 +24,25 @@ import { Pagination } from '@/components/shared/Pagination';
 
 type FilterKey = 'all' | VoucherStatus;
 
+// `reserved` = voucher đang bị một đơn chưa hoàn tất giữ chỗ; `revoked` = bị
+// quản trị thu hồi. BE báo cáo hai trạng thái này TÁCH BIỆT với `expired`.
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
   { key: 'unused', label: 'Chưa sử dụng' },
+  { key: 'reserved', label: 'Đang giữ' },
   { key: 'used', label: 'Đã sử dụng' },
   { key: 'expired', label: 'Hết hạn' },
+  { key: 'revoked', label: 'Đã thu hồi' },
 ];
-
-const TYPE_LABEL: Record<string, string> = {
-  free_wash: 'Rửa xe miễn phí',
-};
-
-function isExpired(v: Voucher): boolean {
-  if (v.status === 'expired') return true;
-  return v.status === 'unused' && new Date(v.expiresAt).getTime() < Date.now();
-}
-
-function effectiveStatus(v: Voucher): VoucherStatus {
-  if (v.status === 'used') return 'used';
-  if (isExpired(v)) return 'expired';
-  return 'unused';
-}
 
 function VoucherCard({ v }: { v: Voucher }) {
   const router = useRouter();
-  const status = effectiveStatus(v);
+  const status = effectiveVoucherStatus(v);
   const disabled = status !== 'unused';
+  const benefitType = v.campaign?.benefitType;
+  const isFreeService =
+    benefitType === 'free_service' || (!benefitType && v.type === 'free_wash');
+  const minOrder = voucherMinOrderLabel(v);
 
   return (
     <div
@@ -62,12 +62,19 @@ function VoucherCard({ v }: { v: Voucher }) {
           : 'border-border/60 hover:-translate-y-0.5 hover:shadow-md',
       )}
     >
-      {/* Left colored stub */}
-      <div className='relative w-32 shrink-0 bg-gradient-to-br from-primary to-blue-700 text-white flex flex-col items-center justify-center p-4 text-center'>
+      {/* Left colored stub - tô theo màu chiến dịch nếu có. */}
+      <div
+        className='relative w-32 shrink-0 bg-gradient-to-br from-primary to-blue-700 text-white flex flex-col items-center justify-center p-4 text-center'
+        style={
+          v.campaign?.themeColor
+            ? { background: v.campaign.themeColor }
+            : undefined
+        }
+      >
         <span className='text-[10px] font-semibold uppercase tracking-widest text-white/70'>
-          {v.type === 'free_wash' ? 'Tặng' : 'Giảm'}
+          {isFreeService ? 'Tặng' : 'Giảm'}
         </span>
-        {v.type === 'free_wash' ? (
+        {isFreeService ? (
           <Gift className='w-9 h-9 my-1' />
         ) : (
           <span className='text-2xl font-semibold leading-none my-1 flex items-center'>
@@ -86,16 +93,18 @@ function VoucherCard({ v }: { v: Voucher }) {
         <div>
           <div className='flex items-start justify-between gap-2'>
             <h3 className='font-heading font-bold text-foreground leading-snug'>
-              {TYPE_LABEL[v.type] ?? v.type}
+              {voucherTitle(v)}
             </h3>
             <span className='shrink-0 text-[9px] font-semibold uppercase tracking-wider bg-primary/10 text-primary rounded-md px-1.5 py-0.5'>
-              Mới
+              {voucherBenefitLabel(v)}
             </span>
           </div>
           <p className='text-xs text-muted-foreground mt-1 line-clamp-2'>
-            {v.grantedReason ||
-              `Giảm tối đa ${formatCurrency(v.discountCapVnd)} cho dịch vụ rửa xe.`}
+            {v.campaign?.description || v.grantedReason || voucherBenefitLabel(v)}
           </p>
+          {minOrder && (
+            <p className='text-[11px] text-muted-foreground mt-1'>{minOrder}</p>
+          )}
         </div>
 
         <div className='flex items-end justify-between gap-2 mt-3'>
@@ -122,12 +131,14 @@ function VoucherCard({ v }: { v: Voucher }) {
             <span
               className={cn(
                 'rounded-lg px-3 py-2 text-xs font-bold',
-                status === 'used'
-                  ? 'bg-muted text-muted-foreground'
-                  : 'bg-destructive/10 text-destructive',
+                status === 'reserved'
+                  ? 'bg-warning/10 text-warning'
+                  : status === 'used'
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-destructive/10 text-destructive',
               )}
             >
-              {status === 'used' ? 'Đã sử dụng' : 'Hết hạn'}
+              {VOUCHER_STATUS_META[status].label}
             </span>
           )}
         </div>
@@ -168,7 +179,7 @@ function ClaimVoucherBox() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') submit();
           }}
-          placeholder='VD: TET2026-20260620-0001'
+          placeholder='VD: TET2026-4KP9XM2A7B'
           className='min-w-0 flex-1 rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm font-mono uppercase focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         />
         <button

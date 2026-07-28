@@ -6,24 +6,24 @@ import { useCallback } from 'react';
 
 export const useLogout = () => {
   const router = useRouter();
-  const setUser = useAuthStore((s) => s.setUser);
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
+  const clearSession = useAuthStore((s) => s.clearSession);
 
   return useCallback(
     async (redirectTo: string = '/') => {
       const { refreshToken } = useAuthStore.getState();
       try {
-        await axiosInstance.post(ENDPOINTS.auth.logout, { refreshToken });
+        // POST /auth/logout thu hồi refresh token; body BẮT BUỘC có refreshToken
+        // nên không có token thì bỏ qua luôn, chỉ dọn phiên phía client.
+        if (refreshToken) {
+          await axiosInstance.post(ENDPOINTS.auth.logout, { refreshToken });
+        }
       } catch {
         // ignore
       } finally {
-        setAccessToken(null);
-        setRefreshToken(null);
-        setUser(null);
+        clearSession();
         router.replace(redirectTo);
       }
     },
-    [router, setAccessToken, setRefreshToken, setUser],
+    [clearSession, router],
   );
 };

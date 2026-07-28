@@ -41,9 +41,11 @@ import {
 } from '@/lib/format';
 import {
   ORDER_STATUS_META,
+  PAYMENT_STATUS,
   PAYMENT_STATUS_META,
   PAYMENT_METHOD_LABEL,
   isCancellableByCustomer,
+  isSettledPayment,
 } from '@/constants';
 import { Order, OrderStatus, ServiceType } from '@/types/order';
 
@@ -235,7 +237,11 @@ export default function OrderDetailPage() {
     order.status === 'cancelled' || order.status === 'no_show';
   const doneIdx = lastDoneStep(order.status);
   const canModify = isCancellableByCustomer(order.status);
-  const isFree = Number(order.amount) === 0;
+  // BE nói thẳng "không phải thu gì" qua `paymentStatus = no_payment_required`
+  // (ưu đãi phủ hết đơn). Số tiền 0đ chỉ là dấu hiệu dự phòng.
+  const isFree =
+    order.paymentStatus === PAYMENT_STATUS.NO_PAYMENT_REQUIRED ||
+    Number(order.amount) === 0;
   const serviceName = service?.name || 'Gói dịch vụ';
   const estimatedMinutes =
     service?.vehiclePricing?.find(
@@ -491,7 +497,7 @@ export default function OrderDetailPage() {
           <InfoRow label='Trạng thái'>
             <span
               className={cn(
-                order.paymentStatus === 'paid' || isFree
+                isSettledPayment(order.paymentStatus) || isFree
                   ? 'text-success'
                   : 'text-warning',
               )}

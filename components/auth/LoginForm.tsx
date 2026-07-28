@@ -74,9 +74,13 @@ export function LoginForm({
                 />
 
                 <div className='flex justify-end'>
-                  <span className='cursor-pointer text-sm font-medium text-primary transition-colors hover:text-primary/80 hover:underline'>
+                  <button
+                    type='button'
+                    onClick={() => router.push('/forgot-password')}
+                    className='cursor-pointer text-sm font-medium text-primary transition-colors hover:text-primary/80 hover:underline'
+                  >
                     Quên mật khẩu?
-                  </span>
+                  </button>
                 </div>
 
                 <Button

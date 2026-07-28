@@ -17,6 +17,7 @@ import {
   CancelOrderDto,
   PreviewOrderResponse,
 } from '@/types/order';
+import type { LoyaltyAccount } from '@/types/loyalty';
 
 export const useMyOrders = () => {
   return useQuery({
@@ -170,13 +171,12 @@ export const useActiveServiceTypes = () => {
   });
 };
 
-/** Tài khoản loyalty của khách (điểm + tiến độ voucher rửa miễn phí). */
-export interface MyLoyalty {
-  tierName: string;
-  pointsBalance: number;
-  successfulWashesTowardVoucher: number;
-  totalSuccessfulWashes: number;
-}
+/**
+ * Tài khoản loyalty của khách - `LoyaltyAccountResponse`.
+ * Mốc nhận voucher (`washesRequiredForNextVoucher`) và giá trị voucher kế tiếp
+ * (`estimatedNextVoucherVnd`) do BE tính theo hạng, KHÔNG suy lại ở client.
+ */
+export type MyLoyalty = LoyaltyAccount;
 
 export const useMyLoyalty = () => {
   return useQuery({

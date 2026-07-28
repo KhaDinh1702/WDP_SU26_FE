@@ -39,6 +39,7 @@ import {
   ORDER_STATUS_META,
   PAYMENT_STATUS_META,
   isCancellableByCustomer,
+  isSettledPayment,
 } from '@/constants';
 import { Order, OrderStatus } from '@/types/order';
 
@@ -521,14 +522,14 @@ export default function MyOrdersPage() {
                         ? 'Chuyển khoản'
                         : 'Tiền mặt'}
                       {' · '}
+                      {/* `no_payment_required` = ưu đãi phủ hết đơn, coi như đã tất toán. */}
                       <span
                         className={cn(
                           'font-semibold',
-                          order.paymentStatus === 'paid'
+                          isSettledPayment(order.paymentStatus) ||
+                            Number(order.amount) === 0
                             ? 'text-success'
-                            : Number(order.amount) === 0
-                              ? 'text-success'
-                              : 'text-foreground',
+                            : 'text-foreground',
                         )}
                       >
                         {Number(order.amount) === 0

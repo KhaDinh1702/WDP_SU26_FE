@@ -8,7 +8,7 @@ export const useVoucher = (id: string) => {
     queryFn: async () => {
       if (!id) return null;
       const res = await getMyVoucher(id);
-      return res.data?.data || res.data || null;
+      return res.data ?? null;
     },
     enabled: !!id,
   });

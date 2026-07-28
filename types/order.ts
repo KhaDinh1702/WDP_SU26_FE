@@ -8,20 +8,44 @@ export type OrderStatus =
   | 'no_show';
 
 export type PaymentMethod = 'online' | 'cash';
-export type PaymentStatus = 'unpaid' | 'paid' | 'refunded';
 
+/**
+ * `no_payment_required` = ưu đãi đã phủ hết giá trị đơn nên không còn gì để thu.
+ * Đơn coi như đã tất toán nhưng KHÔNG được tính vào doanh thu.
+ */
+export type PaymentStatus =
+  | 'unpaid'
+  | 'paid'
+  | 'refunded'
+  | 'no_payment_required';
+
+/** Khớp `OrderResponse` (Swagger BE). */
 export interface Order {
   id: string;
   _id?: string;
   customerId: string;
   vehicleId: string;
   serviceTypeId: string;
+  /** Chỉ có khi BE populate. */
+  customerName?: string;
+  customerEmail?: string;
+  licensePlate?: string;
+  serviceName?: string;
   staffShiftId: string;
   scheduledAt: string; // UTC ISO string
+  estimatedMinutes?: number;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   amount: number;
+  /** Giá gốc trước mọi khoản giảm. */
+  originalAmount?: number;
+  discountAmount?: number;
+  discountPercent?: number;
+  /** VD: `golden_hour:Bronze+voucher:FREEWASH-...`. */
+  discountReason?: string;
+  /** Voucher đã áp cho đơn này. */
+  voucherId?: string;
   priorityLevel: number;
   rescheduleCount: number;
   cancelReason?: string;
@@ -32,6 +56,11 @@ export interface Order {
   assignedWasherName?: string;
   assignedWasherPhone?: string;
   assignedWasherAvgRating?: number;
+  /** Số sao khách đã chấm cho đơn (1-5). */
+  orderRating?: number;
+  workOrderStatus?: string;
+  canRate?: boolean;
+  alreadyRated?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,7 +80,8 @@ export interface CreateOrderDto {
   scheduledAt: string; // UTC ISO string
   paymentMethod: PaymentMethod;
   note?: string;
-  voucherId?: string; // FREE_WASH voucher to redeem (amount → 0, cash-only)
+  /** Voucher áp cho đơn. Mức giảm do chiến dịch của voucher quyết định. */
+  voucherId?: string;
 }
 
 export interface AvailableSlot {

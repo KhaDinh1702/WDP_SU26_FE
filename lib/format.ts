@@ -47,6 +47,17 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   });
 }
 
+/**
+ * Lấy khoá ngày "YYYY-MM-DD" theo GIỜ ĐỊA PHƯƠNG.
+ * Không dùng `toISOString().split('T')[0]`: hàm đó trả về ngày theo UTC nên ở
+ * VN (UTC+7) sẽ ra ngày hôm trước trong khoảng 00:00–06:59.
+ */
+export function toLocalDateKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 /** True nếu ngày (theo lịch) nằm sau hôm nay. Bỏ qua phần giờ. */
 export function isFutureDay(value: string | Date | null | undefined): boolean {
   if (!value) return false;

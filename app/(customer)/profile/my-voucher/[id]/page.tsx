@@ -15,28 +15,29 @@ import {
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { useVoucher } from '@/hooks/vouchers/useVoucher';
-import { Voucher, VoucherStatus } from '@/types/voucher';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
+import { VoucherStatus } from '@/types/voucher';
+import {
+  effectiveVoucherStatus,
+  voucherBenefitLabel,
+  voucherMinOrderLabel,
+  voucherTitle,
+} from '@/lib/voucher';
+import { formatDate, formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-const TYPE_LABEL: Record<string, string> = {
-  free_wash: 'Rửa xe miễn phí',
-};
-
-function effectiveStatus(v: Voucher): VoucherStatus {
-  if (v.status === 'used') return 'used';
-  if (v.status === 'expired' || new Date(v.expiresAt).getTime() < Date.now())
-    return 'expired';
-  return 'unused';
-}
-
+/**
+ * `reserved` = voucher đang bị một đơn chưa hoàn tất giữ chỗ (không phải "đã dùng").
+ * `revoked` = quản trị thu hồi sớm, BE cố ý KHÔNG báo cáo là `expired`.
+ */
 const STATUS_META: Record<
   VoucherStatus,
   { label: string; className: string }
 > = {
   unused: { label: 'Chưa sử dụng', className: 'bg-green-100 text-green-700' },
+  reserved: { label: 'Đang giữ cho đơn', className: 'bg-warning/15 text-warning' },
   used: { label: 'Đã sử dụng', className: 'bg-muted text-muted-foreground' },
   expired: { label: 'Hết hạn', className: 'bg-red-100 text-destructive' },
+  revoked: { label: 'Đã thu hồi', className: 'bg-red-100 text-destructive' },
 };
 
 export default function VoucherDetailPage({
@@ -81,8 +82,14 @@ export default function VoucherDetailPage({
     );
   }
 
-  const status = effectiveStatus(voucher);
+  const status = effectiveVoucherStatus(voucher);
   const statusMeta = STATUS_META[status];
+  const campaign = voucher.campaign;
+  const benefitType = campaign?.benefitType;
+  const isFreeService =
+    benefitType === 'free_service' ||
+    (!benefitType && voucher.type === 'free_wash');
+  const minOrder = voucherMinOrderLabel(voucher);
 
   return (
     <div className='space-y-6 animate-fade-in'>
@@ -96,11 +103,18 @@ export default function VoucherDetailPage({
 
       {/* Voucher hero */}
       <div className='flex flex-col sm:flex-row rounded-xl overflow-hidden border border-border/60 bg-card shadow-xs'>
-        <div className='relative sm:w-48 shrink-0 bg-gradient-to-br from-primary to-blue-700 text-white flex flex-col items-center justify-center p-6 text-center'>
+        <div
+          className='relative sm:w-48 shrink-0 bg-gradient-to-br from-primary to-blue-700 text-white flex flex-col items-center justify-center p-6 text-center'
+          style={
+            campaign?.themeColor
+              ? { background: campaign.themeColor }
+              : undefined
+          }
+        >
           <span className='text-[11px] font-semibold uppercase tracking-widest text-white/70'>
-            {voucher.type === 'free_wash' ? 'Tặng' : 'Giảm'}
+            {isFreeService ? 'Tặng' : 'Giảm'}
           </span>
-          {voucher.type === 'free_wash' ? (
+          {isFreeService ? (
             <Gift className='w-12 h-12 my-2' />
           ) : (
             <Percent className='w-10 h-10 my-2' />
@@ -113,7 +127,7 @@ export default function VoucherDetailPage({
         <div className='flex-1 p-6 space-y-3'>
           <div className='flex items-start justify-between gap-3'>
             <h1 className='font-heading text-xl font-semibold text-foreground'>
-              {TYPE_LABEL[voucher.type] ?? voucher.type}
+              {voucherTitle(voucher)}
             </h1>
             <span
               className={cn(
@@ -125,9 +139,15 @@ export default function VoucherDetailPage({
             </span>
           </div>
           <p className='text-sm text-muted-foreground'>
-            {voucher.grantedReason ||
-              `Giảm tối đa ${formatCurrency(voucher.discountCapVnd)} cho dịch vụ rửa xe.`}
+            {campaign?.description ||
+              voucher.grantedReason ||
+              voucherBenefitLabel(voucher)}
           </p>
+          {minOrder && (
+            <p className='text-xs font-semibold text-foreground/70'>
+              {minOrder}
+            </p>
+          )}
 
           {status === 'unused' && (
             <button
@@ -145,24 +165,49 @@ export default function VoucherDetailPage({
         <DetailRow
           icon={Ticket}
           label='Loại voucher'
-          value={TYPE_LABEL[voucher.type] ?? voucher.type}
+          value={voucherTitle(voucher)}
         />
         <DetailRow
           icon={Percent}
-          label='Giảm tối đa'
-          value={formatCurrency(voucher.discountCapVnd)}
+          label='Ưu đãi'
+          value={voucherBenefitLabel(voucher)}
         />
+        {minOrder && (
+          <DetailRow icon={Ticket} label='Điều kiện' value={minOrder} />
+        )}
         <DetailRow
           icon={Calendar}
           label='Hạn sử dụng'
           value={formatDate(voucher.expiresAt)}
         />
         <DetailRow icon={Hash} label='Mã voucher' value={voucher.code} />
+        {/* Voucher đang bị một đơn chưa hoàn tất giữ chỗ. */}
+        {voucher.status === 'reserved' && voucher.reservedUntil && (
+          <DetailRow
+            icon={Calendar}
+            label='Đang giữ đến'
+            value={formatDateTime(voucher.reservedUntil)}
+          />
+        )}
         {voucher.usedAt && (
           <DetailRow
             icon={CheckCircle2}
             label='Đã sử dụng lúc'
             value={formatDateTime(voucher.usedAt)}
+          />
+        )}
+        {voucher.revokedAt && (
+          <DetailRow
+            icon={ClipboardList}
+            label='Bị thu hồi lúc'
+            value={formatDateTime(voucher.revokedAt)}
+          />
+        )}
+        {voucher.revokeReason && (
+          <DetailRow
+            icon={ClipboardList}
+            label='Lý do thu hồi'
+            value={voucher.revokeReason}
           />
         )}
         {voucher.grantedReason && (
@@ -173,6 +218,18 @@ export default function VoucherDetailPage({
           />
         )}
       </div>
+
+      {/* Điều khoản của chiến dịch. */}
+      {campaign?.terms && (
+        <div className='rounded-xl border border-border/60 bg-card p-5 shadow-xs'>
+          <h2 className='font-heading text-sm font-bold text-foreground'>
+            Điều khoản áp dụng
+          </h2>
+          <p className='mt-2 text-sm whitespace-pre-line text-muted-foreground'>
+            {campaign.terms}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

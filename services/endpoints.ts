@@ -7,12 +7,26 @@ export const ENDPOINTS = {
   auth: {
     login: '/auth/login',
     register: '/auth/register',
+    /** POST - đăng nhập/đăng ký bằng Google id_token (luồng SPA). */
+    google: '/auth/google',
+    /** GET - điều hướng TRÌNH DUYỆT tới đây để bắt đầu luồng redirect Google. */
+    googleRedirect: '/auth/google',
+    /** GET - Google gọi về đây. Không bao giờ gọi từ code ứng dụng. */
+    googleCallback: '/auth/google/callback',
     refresh: '/auth/refresh',
     logout: '/auth/logout',
+    /** Trả về AuthPayload (sub/email/role), KHÔNG phải hồ sơ đầy đủ. */
     me: '/auth/me',
     otpSend: '/auth/otp/send',
     otpVerify: '/auth/otp/verify',
+    forgotPassword: '/auth/forgot-password',
+    resetPassword: '/auth/reset-password',
     adminOnly: '/auth/admin-only',
+  },
+  /** Hồ sơ của chính người đăng nhập - BE `MeProfileController` (@Controller('me/profile')). */
+  profile: {
+    me: '/me/profile',
+    changePassword: '/me/profile/change-password',
   },
   /** Đơn của chính khách hàng - BE `OrderController` (@Controller('me/orders')). */
   orders: {
@@ -109,8 +123,24 @@ export const ENDPOINTS = {
     list: '/admin/vouchers',
     create: '/admin/vouchers',
     bulk: '/admin/vouchers/bulk',
+    stats: '/admin/vouchers/stats',
+    batches: '/admin/vouchers/batches',
     byId: (id: string) => `/admin/vouchers/${id}`,
     revoke: (id: string) => `/admin/vouchers/${id}/revoke`,
+  },
+  /** Chiến dịch voucher, bản công khai - BE `VoucherCampaignController`. */
+  voucherCampaigns: {
+    byId: (id: string) => `/voucher-campaigns/${id}`,
+  },
+  /** Chiến dịch voucher phía quản trị - BE `AdminVoucherCampaignController`. */
+  adminVoucherCampaigns: {
+    list: '/admin/voucher-campaigns',
+    create: '/admin/voucher-campaigns',
+    byId: (id: string) => `/admin/voucher-campaigns/${id}`,
+    activate: (id: string) => `/admin/voucher-campaigns/${id}/activate`,
+    pause: (id: string) => `/admin/voucher-campaigns/${id}/pause`,
+    end: (id: string) => `/admin/voucher-campaigns/${id}/end`,
+    stats: (id: string) => `/admin/voucher-campaigns/${id}/stats`,
   },
   tierConfigs: {
     list: '/tier-configs',

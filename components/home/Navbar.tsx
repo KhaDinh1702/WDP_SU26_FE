@@ -31,8 +31,11 @@ import { useLogout } from '@/hooks/auth/useLogout';
 import { getMyLoyalty } from '@/lib/customer-api';
 import type { LoyaltyAccount } from '@/types/loyalty';
 
-/** Số lượt rửa hợp lệ cho 1 voucher thưởng - khớp BE. */
-const WASHES_PER_FREE_VOUCHER = 10;
+/**
+ * Dự phòng khi chưa tải xong GET /me/loyalty. Mốc thật do BE trả về theo hạng
+ * qua `washesRequiredForNextVoucher`.
+ */
+const FALLBACK_WASHES_PER_VOUCHER = 10;
 
 const navLinks = [
   { label: 'Đặt lịch', href: '/booking' },
@@ -61,10 +64,9 @@ export function Navbar() {
   const tierMeta = getTierMeta(tierName);
   const points = loyalty?.pointsBalance ?? authUser?.loyaltyPoints ?? 0;
   const towardVoucher = loyalty?.successfulWashesTowardVoucher ?? 0;
-  const voucherPct = Math.min(
-    (towardVoucher / WASHES_PER_FREE_VOUCHER) * 100,
-    100,
-  );
+  const washesPerVoucher =
+    loyalty?.washesRequiredForNextVoucher ?? FALLBACK_WASHES_PER_VOUCHER;
+  const voucherPct = Math.min((towardVoucher / washesPerVoucher) * 100, 100);
   const initials = getInitials(authUser?.name);
 
   return (
@@ -189,8 +191,8 @@ export function Navbar() {
                           />
                         </div>
                         <p className='text-[10px] font-medium text-foreground/50'>
-                          {towardVoucher}/{WASHES_PER_FREE_VOUCHER} lượt rửa tới
-                          voucher thưởng
+                          {towardVoucher}/{washesPerVoucher} lượt rửa tới voucher
+                          thưởng
                         </p>
                       </div>
                     </div>

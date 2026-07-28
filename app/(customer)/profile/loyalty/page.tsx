@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatCurrency } from '@/lib/format';
 
 // Mapping color styles for each tier card
 const tierStyles: Record<
@@ -111,20 +112,24 @@ export default function LoyaltyPage() {
       ? sortedTiers[currentTierIndex + 1]
       : null;
 
-  // ─── Tiến độ voucher rửa miễn phí (mốc 10 lần rửa) ──────────
-  const WASHES_PER_FREE_VOUCHER = 10; // khớp WASHES_PER_FREE_VOUCHER ở BE
+  // ─── Tiến độ voucher thưởng ─────────────────────────────────
+  // Mốc lượt rửa và giá trị voucher kế tiếp do BE tính theo hạng
+  // (`washesRequiredForNextVoucher`, `estimatedNextVoucherVnd`) - không tự suy
+  // lại ở client. Số 10 chỉ là dự phòng khi dữ liệu chưa về.
+  const washesPerVoucher = loyalty?.washesRequiredForNextVoucher ?? 10;
   const towardVoucher = loyalty?.successfulWashesTowardVoucher ?? 0;
-  const washesToVoucher = Math.max(WASHES_PER_FREE_VOUCHER - towardVoucher, 0);
-  const voucherPct = Math.min(
-    (towardVoucher / WASHES_PER_FREE_VOUCHER) * 100,
-    100,
-  );
+  const washesToVoucher =
+    loyalty?.washesRemainingForNextVoucher ??
+    Math.max(washesPerVoucher - towardVoucher, 0);
+  const voucherPct = Math.min((towardVoucher / washesPerVoucher) * 100, 100);
 
   // ─── Tiến độ thăng hạng (theo điểm tích lũy) ────────────────
   const pointsBalance = loyalty?.pointsBalance ?? 0;
-  const pointsToNextTier = nextTierConfig
-    ? Math.max(nextTierConfig.minLoyaltyPoints - pointsBalance, 0)
-    : 0;
+  const pointsToNextTier =
+    loyalty?.pointsToNextTier ??
+    (nextTierConfig
+      ? Math.max(nextTierConfig.minLoyaltyPoints - pointsBalance, 0)
+      : 0);
   const tierPct =
     nextTierConfig && nextTierConfig.minLoyaltyPoints > 0
       ? Math.min((pointsBalance / nextTierConfig.minLoyaltyPoints) * 100, 100)
@@ -162,9 +167,9 @@ export default function LoyaltyPage() {
           <Award className='w-7 h-7 text-primary' /> Khách Hàng Thân Thiết
         </h1>
         <p className='text-sm text-muted-foreground'>
-          Tích điểm qua mỗi lần rửa để nâng hạng, và cứ{' '}
-          {WASHES_PER_FREE_VOUCHER} lượt rửa hợp lệ nhận ngay voucher thưởng
-          bằng ~5% chi tiêu của các lượt đó.
+          Tích điểm qua mỗi lần rửa để nâng hạng, và cứ {washesPerVoucher} lượt
+          rửa hợp lệ nhận ngay voucher thưởng — giá trị thay đổi theo hạng và
+          mức chi tiêu của bạn.
         </p>
       </div>
 
@@ -253,12 +258,12 @@ export default function LoyaltyPage() {
                       Voucher Thưởng
                     </h3>
                     <p className='text-xs text-muted-foreground'>
-                      Cứ {WASHES_PER_FREE_VOUCHER} lượt rửa hợp lệ, bạn nhận
-                      voucher thưởng bằng ~5% chi tiêu của các lượt đó.
+                      Cứ {washesPerVoucher} lượt rửa hợp lệ, bạn nhận một voucher
+                      thưởng tính theo chi tiêu của các lượt đó.
                     </p>
                   </div>
                   <span className='font-semibold text-primary text-base shrink-0'>
-                    {towardVoucher}/{WASHES_PER_FREE_VOUCHER}
+                    {towardVoucher}/{washesPerVoucher}
                   </span>
                 </div>
                 <div className='h-3 bg-muted rounded-full overflow-hidden relative border border-border/20'>
@@ -269,12 +274,17 @@ export default function LoyaltyPage() {
                 </div>
                 <div className='bg-[#FFFBF2] border border-[#F9E1B2] rounded-xl p-4 flex items-start gap-3 text-[#856404] text-xs sm:text-sm shadow-xs'>
                   <Sparkles className='w-5 h-5 text-orange-400 shrink-0 mt-0.5' />
+                  {/* Giá trị voucher kế tiếp do BE tính sẵn - không suy lại ở client. */}
                   <p>
                     Còn{' '}
                     <strong className='text-[#856404]'>
                       {washesToVoucher}
                     </strong>{' '}
-                    lượt rửa hợp lệ nữa để nhận <strong>voucher thưởng</strong>!
+                    lượt rửa hợp lệ nữa để nhận <strong>voucher thưởng</strong>
+                    {loyalty?.estimatedNextVoucherVnd
+                      ? ` trị giá khoảng ${formatCurrency(loyalty.estimatedNextVoucherVnd)}`
+                      : ''}
+                    !
                   </p>
                 </div>
               </div>

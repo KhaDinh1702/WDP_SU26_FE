@@ -9,11 +9,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Search, RefreshCw, Ban, KeyRound, ChevronDown } from 'lucide-react';
 
+/** Khớp `UserResponse` (Swagger). Trạng thái là `isActive`, KHÔNG phải `status`. */
 interface UserData {
   _id?: string;
   id?: string;
   role?: string;
-  status?: string;
+  isActive?: boolean;
   fullName?: string;
   name?: string;
   email?: string;
@@ -29,10 +30,9 @@ const roleConfig: Record<string, { label: string; cls: string }> = {
   customer: { label: 'Khách hàng', cls: 'bg-muted text-muted-foreground' },
 };
 
-const statusConfig: Record<string, { label: string; cls: string }> = {
+const statusConfig: Record<'active' | 'inactive', { label: string; cls: string }> = {
   active:   { label: 'Hoạt động', cls: 'bg-success/10 text-success' },
   inactive: { label: 'Vô hiệu',   cls: 'bg-destructive/10 text-destructive' },
-  banned:   { label: 'Banned',    cls: 'bg-gray-100 text-gray-600' },
 };
 
 export default function AdminUsersPage() {
@@ -57,8 +57,10 @@ export default function AdminUsersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
 
+  // PATCH /admin/users/:id/status nhận `{ isActive: boolean }`.
   const changeStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => adminUpdateUserStatus(id, status),
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      adminUpdateUserStatus(id, isActive),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
 
@@ -137,7 +139,8 @@ export default function AdminUsersPage() {
                   ) : (
                     paginatedUsers.map((u: UserData) => {
                       const role = roleConfig[u.role ?? ''] ?? { label: u.role, cls: 'bg-muted text-muted-foreground' };
-                      const status = statusConfig[u.status ?? 'active'] ?? statusConfig.active;
+                      const isActive = u.isActive !== false;
+                      const status = isActive ? statusConfig.active : statusConfig.inactive;
                       const id = u._id ?? u.id ?? '';
                       return (
                         <tr key={id} className='hover:bg-muted/20 transition-colors'>
@@ -173,8 +176,8 @@ export default function AdminUsersPage() {
                               </select>
                               {/* Toggle status */}
                               <button
-                                onClick={() => changeStatus.mutate({ id, status: u.status === 'active' ? 'inactive' : 'active' })}
-                                title={u.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}
+                                onClick={() => changeStatus.mutate({ id, isActive: !isActive })}
+                                title={isActive ? 'Vô hiệu hoá' : 'Kích hoạt'}
                                 className='w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:border-destructive/40 hover:text-destructive transition-all'>
                                 <Ban className='w-3.5 h-3.5' />
                               </button>

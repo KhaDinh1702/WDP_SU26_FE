@@ -7,31 +7,39 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { RegisterForm } from '@/components/auth/RegisterForm';
+import { getRoleHome } from '@/constants';
+import { toLocalDateKey } from '@/lib/format';
 
 export default function RegisterPage() {
   const route = useRouter();
   const register = useRegister();
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const setUser = useAuthStore((s) => s.setUser);
+  const setSession = useAuthStore((s) => s.setSession);
 
   const handleSubmit = async (data: RegisterFormData): Promise<void> => {
-    const { confirmPassword, ...payload } = data;
+    const { confirmPassword, dateOfBirth, ...rest } = data;
     if (confirmPassword !== data.password) {
       toast.error('Mật khẩu nhập lại không khớp.');
       return;
     }
 
-    register.mutate(payload, {
-      onSuccess: (res) => {
-        const authData = res?.data || res;
-        const token = authData?.accessToken;
-        const user = authData?.user;
+    // `Register.dateOfBirth` là `format: date` → gửi `YYYY-MM-DD` theo giờ địa
+    // phương, không phải ISO date-time đầy đủ.
+    const payload = {
+      ...rest,
+      ...(dateOfBirth ? { dateOfBirth: toLocalDateKey(dateOfBirth) } : {}),
+    };
 
-        if (token && user) {
-          setAccessToken(token);
-          setUser(user);
+    register.mutate(payload, {
+      // POST /auth/register trả `AuthResponse` (201) - đăng ký xong là đã đăng nhập.
+      onSuccess: (res) => {
+        if (res?.accessToken) {
+          setSession({
+            accessToken: res.accessToken,
+            refreshToken: res.refreshToken,
+            user: res.user,
+          });
           toast.success('Đăng ký và đăng nhập thành công!');
-          route.replace('/');
+          route.replace(getRoleHome(res.user?.role));
         } else {
           toast.success('Đăng ký thành công! Vui lòng đăng nhập.');
           route.replace('/login');

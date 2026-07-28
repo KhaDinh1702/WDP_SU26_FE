@@ -1,6 +1,22 @@
 import { axiosInstance } from '@/lib/axios';
 import { ENDPOINTS } from '@/services/endpoints';
 import type { DashboardQuery, DashboardReport } from '@/types/dashboard';
+import type {
+  BulkCreateVoucherPayload,
+  BulkVoucherResult,
+  CampaignStats,
+  CreateVoucherCampaignDto,
+  GrantVoucherPayload,
+  UpdateVoucherCampaignDto,
+  Voucher,
+  VoucherBatch,
+  VoucherCampaign,
+  VoucherCampaignListResponse,
+  VoucherCampaignStatus,
+  VoucherListResponse,
+  VoucherStats,
+  VoucherStatus,
+} from '@/types/voucher';
 
 // ─── Auth ──────────────────────────────────────────────
 export const adminGetMe = () => axiosInstance.get('/auth/me');
@@ -30,8 +46,9 @@ export const adminDeleteUser = (id: string) =>
 export const adminUpdateUserRole = (id: string, role: string) =>
   axiosInstance.patch(`/admin/users/${id}/role`, { role });
 
-export const adminUpdateUserStatus = (id: string, status: string) =>
-  axiosInstance.patch(`/admin/users/${id}/status`, { status });
+/** PATCH /admin/users/:id/status — BE nhận `{ isActive: boolean }` (`SetUserStatus`). */
+export const adminUpdateUserStatus = (id: string, isActive: boolean) =>
+  axiosInstance.patch(`/admin/users/${id}/status`, { isActive });
 
 export const adminResetUserPassword = (id: string, newPassword: string) =>
   axiosInstance.post(`/admin/users/${id}/reset-password`, { newPassword });
@@ -136,64 +153,101 @@ export const adminAssignWasher = (id: string, washerId: string) =>
   axiosInstance.patch(`/admin/work-orders/${id}/assign`, { washerId });
 
 // ─── Vouchers (Admin / Manager) ────────────────────────
-export interface GrantVoucherPayload {
-  customerId: string;
-  discountCapVnd?: number;
-  expiresAt?: string;
-  /** Mã tuỳ chỉnh (để trống = BE tự sinh). */
-  code?: string;
-}
+// Kiểu dữ liệu voucher đã chuyển sang `@/types/voucher` (mirror Swagger).
+// Re-export để các import cũ từ '@/lib/admin-api' không gãy.
+export type {
+  BulkCreateVoucherPayload,
+  BulkVoucherResult,
+  GrantVoucherPayload,
+  VoucherBatch,
+  VoucherStats,
+} from '@/types/voucher';
 
-/** Tạo 1 lô voucher pool (khách tự nhận bằng mã) — POST /admin/vouchers/bulk. */
-export interface BulkCreateVoucherPayload {
-  quantity: number;
-  /** Tiền tố mã (1-15 ký tự A-Z/0-9). Mã sinh ra: PREFIX-YYYYMMDD-NNNN. */
-  prefix?: string;
-  discountCapVnd?: number;
-  expiresAt?: string;
-}
-
-export interface VoucherBatch {
-  batchKey: string;
-  prefix: string;
-  createdAt: string;
-  expiresAt: string;
-  discountCapVnd: number;
-  total: number;
-  inPool: number;
-  claimed: number;
-  used: number;
-  expired: number;
-}
-
-export interface VoucherStats {
-  total: number;
-  inPool: number;
-  claimed: number;
-  used: number;
-  expired: number;
-}
-
-export const adminGetVouchers = (params?: Record<string, unknown>) =>
-  axiosInstance.get('/admin/vouchers', { params });
+export const adminGetVouchers = (params?: {
+  page?: number;
+  limit?: number;
+  status?: VoucherStatus;
+  customerId?: string;
+}) => axiosInstance.get<VoucherListResponse>(ENDPOINTS.adminVouchers.list, { params });
 
 export const adminGetVoucherStats = () =>
-  axiosInstance.get<VoucherStats>('/admin/vouchers/stats');
+  axiosInstance.get<VoucherStats>(ENDPOINTS.adminVouchers.stats);
 
 export const adminGetVoucherBatches = () =>
-  axiosInstance.get<{ batches: VoucherBatch[] }>('/admin/vouchers/batches');
+  axiosInstance.get<{ batches: VoucherBatch[] }>(
+    ENDPOINTS.adminVouchers.batches,
+  );
 
 export const adminGetVoucher = (id: string) =>
-  axiosInstance.get(`/admin/vouchers/${id}`);
+  axiosInstance.get<Voucher>(ENDPOINTS.adminVouchers.byId(id));
 
 export const adminGrantVoucher = (data: GrantVoucherPayload) =>
-  axiosInstance.post('/admin/vouchers', data);
+  axiosInstance.post<Voucher>(ENDPOINTS.adminVouchers.create, data);
 
 export const adminBulkCreateVouchers = (data: BulkCreateVoucherPayload) =>
-  axiosInstance.post('/admin/vouchers/bulk', data);
+  axiosInstance.post<BulkVoucherResult>(ENDPOINTS.adminVouchers.bulk, data);
 
+/**
+ * PATCH /admin/vouchers/:id/revoke — voucher chuyển sang `revoked`.
+ * `revoked` là trạng thái RIÊNG, BE không gộp vào `expired`.
+ */
 export const adminRevokeVoucher = (id: string, reason: string) =>
-  axiosInstance.patch(`/admin/vouchers/${id}/revoke`, { reason });
+  axiosInstance.patch<Voucher>(ENDPOINTS.adminVouchers.revoke(id), { reason });
+
+// ─── Voucher Campaigns (Admin / Manager) ───────────────
+// Chiến dịch định nghĩa luật cho voucher: loại ưu đãi, mức giảm, đơn tối thiểu,
+// phạm vi áp dụng, chính sách cộng dồn, ngân sách và giới hạn lượt dùng.
+export const adminGetVoucherCampaigns = (params?: {
+  status?: VoucherCampaignStatus;
+  source?: string;
+  page?: number;
+  limit?: number;
+}) =>
+  axiosInstance.get<VoucherCampaignListResponse>(
+    ENDPOINTS.adminVoucherCampaigns.list,
+    { params },
+  );
+
+export const adminGetVoucherCampaign = (id: string) =>
+  axiosInstance.get<VoucherCampaign>(
+    ENDPOINTS.adminVoucherCampaigns.byId(id),
+  );
+
+/** Tạo chiến dịch — luôn ở trạng thái DRAFT, chưa phát hành voucher nào. */
+export const adminCreateVoucherCampaign = (data: CreateVoucherCampaignDto) =>
+  axiosInstance.post<VoucherCampaign>(
+    ENDPOINTS.adminVoucherCampaigns.create,
+    data,
+  );
+
+/** Sửa từng phần. Chiến dịch ENDED là bất biến. `status` không sửa ở đây. */
+export const adminUpdateVoucherCampaign = (
+  id: string,
+  data: UpdateVoucherCampaignDto,
+) =>
+  axiosInstance.patch<VoucherCampaign>(
+    ENDPOINTS.adminVoucherCampaigns.byId(id),
+    data,
+  );
+
+/** DRAFT/SCHEDULED/PAUSED → ACTIVE (hoặc SCHEDULED nếu validFrom còn ở tương lai). */
+export const adminActivateVoucherCampaign = (id: string) =>
+  axiosInstance.post<VoucherCampaign>(
+    ENDPOINTS.adminVoucherCampaigns.activate(id),
+  );
+
+/** ACTIVE/SCHEDULED → PAUSED. Voucher đã phát tạm ngừng dùng được, không bị thu hồi. */
+export const adminPauseVoucherCampaign = (id: string) =>
+  axiosInstance.post<VoucherCampaign>(
+    ENDPOINTS.adminVoucherCampaigns.pause(id),
+  );
+
+/** Trạng thái cuối. Chiến dịch và voucher của nó được giữ lại làm lịch sử. */
+export const adminEndVoucherCampaign = (id: string) =>
+  axiosInstance.post<VoucherCampaign>(ENDPOINTS.adminVoucherCampaigns.end(id));
+
+export const adminGetVoucherCampaignStats = (id: string) =>
+  axiosInstance.get<CampaignStats>(ENDPOINTS.adminVoucherCampaigns.stats(id));
 
 // ─── Golden Hours ──────────────────────────────────────
 export const adminGetGoldenHours = () =>
