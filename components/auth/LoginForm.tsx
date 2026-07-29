@@ -17,16 +17,19 @@ export function LoginForm({
   className,
   onSubmit,
   loading,
+  defaultEmail = '',
   ...props
 }: Omit<React.ComponentProps<'div'>, 'onSubmit'> & {
   onSubmit: (data: LoginFormData) => void;
   loading: boolean;
+  /** Điền sẵn email, ví dụ khi quay về từ màn hình xác minh email. */
+  defaultEmail?: string;
 }) {
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     mode: 'onTouched',
     defaultValues: {
-      email: '',
+      email: defaultEmail,
       password: '',
     },
   });

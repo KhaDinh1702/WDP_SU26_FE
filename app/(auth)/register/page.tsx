@@ -3,17 +3,14 @@
 import { getErrorMessage } from '@/lib/getErrorMessage';
 import { useRegister } from '@/hooks/auth/useRegister';
 import { RegisterFormData } from '@/schemas/auth';
-import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { RegisterForm } from '@/components/auth/RegisterForm';
-import { getRoleHome } from '@/constants';
 import { toLocalDateKey } from '@/lib/format';
 
 export default function RegisterPage() {
   const route = useRouter();
   const register = useRegister();
-  const setSession = useAuthStore((s) => s.setSession);
 
   const handleSubmit = async (data: RegisterFormData): Promise<void> => {
     const { confirmPassword, dateOfBirth, ...rest } = data;
@@ -30,20 +27,15 @@ export default function RegisterPage() {
     };
 
     register.mutate(payload, {
-      // POST /auth/register trả `AuthResponse` (201) - đăng ký xong là đã đăng nhập.
-      onSuccess: (res) => {
-        if (res?.accessToken) {
-          setSession({
-            accessToken: res.accessToken,
-            refreshToken: res.refreshToken,
-            user: res.user,
-          });
-          toast.success('Đăng ký và đăng nhập thành công!');
-          route.replace(getRoleHome(res.user?.role));
-        } else {
-          toast.success('Đăng ký thành công! Vui lòng đăng nhập.');
-          route.replace('/login');
-        }
+      /**
+       * BE trả `UserResponse` với `isActive: false` và KHÔNG có token nào
+       * (khác mô tả trong Swagger), đồng thời chặn đăng nhập bằng 403 cho tới
+       * khi email được xác minh. Nên đăng ký xong là đi thẳng sang bước nhập
+       * OTP, không mở phiên và cũng không về thẳng trang đăng nhập.
+       */
+      onSuccess: () => {
+        toast.success('Tạo tài khoản thành công! Còn một bước xác minh email.');
+        route.replace(`/verify-email?email=${encodeURIComponent(payload.email)}`);
       },
 
       onError: (error) => {

@@ -242,11 +242,20 @@ export default function OrderDetailPage() {
   const isFree =
     order.paymentStatus === PAYMENT_STATUS.NO_PAYMENT_REQUIRED ||
     Number(order.amount) === 0;
-  const serviceName = service?.name || 'Gói dịch vụ';
+  // `/service-types` chỉ liệt kê dịch vụ ĐANG hoạt động, nên đơn cũ đặt bằng
+  // dịch vụ đã ngưng sẽ tra không ra - ưu tiên tên BE trả kèm đơn.
+  const serviceName = order.serviceName || service?.name || 'Gói dịch vụ';
   const estimatedMinutes =
+    order.estimatedMinutes ??
     service?.vehiclePricing?.find(
       (p) => p.vehicleTypeId === vehicle?.vehicleTypeId,
-    )?.estimatedMinutes ?? service?.estimatedMinutes;
+    )?.estimatedMinutes ??
+    service?.estimatedMinutes;
+
+  // BE quyết định đơn có được chấm điểm hay không, không suy từ trạng thái đơn.
+  const alreadyRated =
+    order.alreadyRated === true || !!submittedFeedbacks[order.id];
+  const canRate = order.canRate === true && !alreadyRated;
 
   const timeStr = new Date(order.scheduledAt).toLocaleTimeString('vi-VN', {
     hour: '2-digit',
@@ -294,7 +303,7 @@ export default function OrderDetailPage() {
               Thanh toán ngay
             </Button>
           )}
-          {order.status === 'completed' && !submittedFeedbacks[order.id] && (
+          {canRate && (
             <Button
               size='sm'
               onClick={() => setIsFeedbacking(true)}
@@ -560,8 +569,10 @@ export default function OrderDetailPage() {
         </SectionCard>
       )}
 
-      {/* Ảnh trước/sau khi rửa */}
-      {(order.status === 'checked_in' ||
+      {/* Ảnh trước/sau khi rửa. `workOrderStatus` = đơn đã có phiếu rửa nên có
+          thể đã có ảnh, kể cả khi sau đó đơn bị huỷ. */}
+      {(!!order.workOrderStatus ||
+        order.status === 'checked_in' ||
         order.status === 'in_progress' ||
         order.status === 'completed') && (
         <OrderWashPhotos
@@ -571,9 +582,10 @@ export default function OrderDetailPage() {
       )}
 
       {/* Đã đánh giá */}
-      {order.status === 'completed' && submittedFeedbacks[order.id] && (
+      {alreadyRated && (
         <p className='text-xs font-semibold text-success inline-flex items-center gap-1.5'>
-          <CheckCircle className='w-4 h-4' /> Bạn đã đánh giá lịch rửa xe này.
+          <CheckCircle className='w-4 h-4' /> Bạn đã đánh giá lịch rửa xe này
+          {typeof order.orderRating === 'number' && ` ${order.orderRating}★`}.
           Cảm ơn bạn!
         </p>
       )}

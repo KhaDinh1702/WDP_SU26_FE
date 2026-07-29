@@ -56,6 +56,14 @@ export const forgotPasswordSchema = z.object({
   email: z.email('Vui lòng nhập đúng định dạng email'),
 });
 
+/** POST /auth/otp/verify - `OtpVerify.code` là chuỗi đúng 6 ký tự. */
+export const verifyOtpSchema = z.object({
+  code: z
+    .string()
+    .length(6, 'Mã xác minh gồm đúng 6 chữ số')
+    .regex(/^\d{6}$/, 'Mã xác minh chỉ gồm chữ số'),
+});
+
 /** POST /auth/reset-password - mã 6 số gửi qua email, dùng một lần. */
 export const resetPasswordSchema = z
   .object({
@@ -139,6 +147,7 @@ export type RegisterFormData = z.infer<typeof registerSchema>;
 export type LoginFormData = z.infer<typeof loginSchema>;
 export type UpdateAccountFormData = z.infer<typeof updateAccountSchema>;
 export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
+export type VerifyOtpFormData = z.infer<typeof verifyOtpSchema>;
 export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 export type UpdateProfileFormData = z.infer<typeof updateProfileSchema>;
