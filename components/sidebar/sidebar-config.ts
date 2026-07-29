@@ -53,7 +53,6 @@ export const SIDEBAR_CONFIG = {
             { href: '/manager/vehicles', icon: Car, label: 'Quản lý xe' },
             { href: '/manager/shifts', icon: Clock, label: 'Ca làm việc' },
             { href: '/manager/vouchers', icon: Ticket, label: 'Voucher' },
-            { href: '/manager/chat-knowledge', icon: Bot, label: 'Huấn luyện AI' },
         ],
     },
 
