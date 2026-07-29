@@ -49,6 +49,7 @@ import Link from 'next/link';
 import { QueryBoundary } from '@/components/shared/QueryBoundary';
 import { WasherStatusMini } from '@/components/washers/WasherStatusMini';
 import { adminGetDashboard } from '@/lib/admin-api';
+import { getTierLabel } from '@/constants/tiers';
 import { DEFAULT_PERIOD, getRangeForPeriod } from '@/lib/date-range';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 import type { DashboardReport } from '@/types/dashboard';
@@ -503,7 +504,8 @@ function DashboardBody({ report }: { report: DashboardReport }) {
               <Panel title='Phân bố hạng thành viên'>
                 <BarList
                   items={customers.tierDistribution.map((t) => ({
-                    label: t.name,
+                    // BE trả tên enum ('None', 'Bronze'); đừng đưa thẳng ra UI.
+                    label: getTierLabel(t.name),
                     value: t.count,
                   }))}
                   format={(v) => `${formatNumber(v)} khách`}

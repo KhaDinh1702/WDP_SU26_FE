@@ -3,11 +3,13 @@
 import { Crown, Coins, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { LoyaltyAccount } from '@/types/loyalty';
+import { getTierLabel } from '@/constants/tiers';
 
+// Chỉ giữ phần TẠO HÌNH ở đây. Tên hạng lấy từ constants/tiers.ts để cả app
+// dùng chung một bộ chữ.
 export const tierStyles: Record<
   string,
   {
-    label: string;
     gradient: string;
     text: string;
     border: string;
@@ -17,7 +19,6 @@ export const tierStyles: Record<
   }
 > = {
   none: {
-    label: 'Thành viên',
     gradient: 'from-slate-600 via-slate-700 to-slate-900',
     text: 'text-slate-100',
     border: 'border-slate-500/40',
@@ -26,7 +27,6 @@ export const tierStyles: Record<
     chipBg: 'bg-white/10',
   },
   member: {
-    label: 'Thành viên',
     gradient: 'from-slate-600 via-slate-700 to-slate-900',
     text: 'text-slate-100',
     border: 'border-slate-500/40',
@@ -35,7 +35,6 @@ export const tierStyles: Record<
     chipBg: 'bg-white/10',
   },
   bronze: {
-    label: 'Đồng',
     gradient: 'from-[#9A6A4A] via-[#795039] to-[#4B3128]',
     text: 'text-orange-50',
     border: 'border-[#8B6046]/50',
@@ -44,7 +43,6 @@ export const tierStyles: Record<
     chipBg: 'bg-orange-50/10',
   },
   silver: {
-    label: 'Bạc',
     gradient: 'from-slate-400 via-slate-500 to-slate-700',
     text: 'text-slate-100',
     border: 'border-slate-400/50',
@@ -53,7 +51,6 @@ export const tierStyles: Record<
     chipBg: 'bg-white/10',
   },
   gold: {
-    label: 'Vàng',
     gradient: 'from-[#C69332] via-[#9D6E1F] to-[#5C421C]',
     text: 'text-amber-100',
     border: 'border-amber-500/40',
@@ -63,10 +60,6 @@ export const tierStyles: Record<
   },
 };
 
-export function getTierLabel(tierName?: string): string {
-  const key = (tierName ?? 'none').toLowerCase();
-  return tierStyles[key]?.label ?? tierName ?? tierStyles.none.label;
-}
 
 export default function LoyaltyCard({
   loyalty,
@@ -80,7 +73,7 @@ export default function LoyaltyCard({
   return (
     <div
       className={`group relative isolate flex min-h-[220px] flex-col justify-between overflow-hidden rounded-2xl border bg-linear-to-br p-6 text-white shadow-[0_24px_55px_-32px_rgba(30,41,59,0.75)] transition-transform duration-300 hover:-translate-y-0.5 ${currentStyle.gradient} ${currentStyle.glow} ${currentStyle.border}`}
-      aria-label={`Thẻ hội viên hạng ${currentStyle.label}`}
+      aria-label={`Thẻ hội viên hạng ${getTierLabel(loyalty?.tierName)}`}
     >
       {/* Background elements */}
       <div className='absolute -right-10 -top-10 -z-10 size-40 rounded-full bg-white/10 blur-2xl transition-transform duration-500 group-hover:scale-125' />
@@ -100,7 +93,7 @@ export default function LoyaltyCard({
         <div
           className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-md ${currentStyle.badgeBg}`}
         >
-          <Crown className='size-3.5' /> {currentStyle.label}
+          <Crown className='size-3.5' /> {getTierLabel(loyalty?.tierName)}
         </div>
       </div>
 

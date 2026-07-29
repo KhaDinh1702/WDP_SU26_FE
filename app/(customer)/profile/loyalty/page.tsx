@@ -16,11 +16,9 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/format';
-// Thẻ hạng + bảng màu + nhãn hạng đã tách sang component dùng chung.
-import LoyaltyCard, {
-  getTierLabel,
-  tierStyles,
-} from '@/components/profile/LoyaltyCard';
+// Thẻ hạng + bảng màu dùng chung; tên hạng lấy từ nguồn duy nhất ở constants.
+import LoyaltyCard, { tierStyles } from '@/components/profile/LoyaltyCard';
+import { getTierLabel } from '@/constants/tiers';
 
 export default function LoyaltyPage() {
   // ─── React Query ─────────────────────────────────────────

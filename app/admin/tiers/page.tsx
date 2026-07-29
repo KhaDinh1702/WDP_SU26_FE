@@ -2,7 +2,7 @@
 
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
 import { adminGetTierConfigs, adminUpdateTierConfig, adminToggleTierConfig } from '@/lib/admin-api';
-import { getTierLabel } from '@/components/profile/LoyaltyCard';
+import { getTierLabel } from '@/constants/tiers';
 import type { TierConfig } from '@/types/loyalty';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';

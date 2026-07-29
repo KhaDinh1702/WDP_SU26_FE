@@ -44,6 +44,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { EmptyState } from '@/components/ui/empty-state';
+import { getTierLabel } from '@/constants/tiers';
 
 const PAGE_SIZE = 10;
 const API_PAGE_SIZE = 100;
@@ -79,14 +80,6 @@ const TYPE_META: Record<
   },
 };
 
-const TIER_LABELS: Record<string, string> = {
-  none: 'Thành viên',
-  member: 'Thành viên',
-  bronze: 'Đồng',
-  silver: 'Bạc',
-  gold: 'Vàng',
-};
-
 function typeMeta(type: string) {
   return (
     TYPE_META[type as LoyaltyTransactionType] ?? {
@@ -95,10 +88,6 @@ function typeMeta(type: string) {
       icon: Coins,
     }
   );
-}
-
-function tierLabel(value: string) {
-  return TIER_LABELS[value.trim().toLowerCase()] ?? value.trim();
 }
 
 function transactionTitle(transaction: LoyaltyTransaction): string {
@@ -118,7 +107,7 @@ function transactionTitle(transaction: LoyaltyTransaction): string {
         /tier changed:\s*(.+?)\s*→\s*(.+)$/i,
       );
       return match
-        ? `Hạng thành viên: ${tierLabel(match[1])} → ${tierLabel(match[2])}`
+        ? `Hạng thành viên: ${getTierLabel(match[1])} → ${getTierLabel(match[2])}`
         : 'Hạng thành viên đã được cập nhật';
     }
     default:

@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
+import { getTierLabel } from '@/constants/tiers';
 
 export function MembershipBanner() {
   return (
@@ -26,7 +27,9 @@ export function MembershipBanner() {
                 </div>
                 <div className='font-heading text-foreground text-xl sm:text-2xl lg:text-3xl mt-2 tracking-tight'>
                   Tích điểm mỗi lần rửa, lên hạng{' '}
-                  <span className='text-primary font-semibold'>Gold</span>
+                  <span className='text-primary font-semibold'>
+                    {getTierLabel('Gold')}
+                  </span>
                 </div>
                 <div className='text-muted-foreground text-sm mt-2 max-w-xl'>
                   Hạng càng cao, mức giảm giờ vàng và cửa sổ đặt lịch càng lớn.

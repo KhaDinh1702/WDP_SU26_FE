@@ -23,7 +23,7 @@ import {
   User2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getTierMeta } from '@/constants';
+import { getTierMeta, getTierLabel } from '@/constants';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { getInitials } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
@@ -60,8 +60,11 @@ export function Navbar() {
   const loyalty: LoyaltyAccount | null =
     loyaltyData?.data?.data ?? loyaltyData?.data ?? null;
 
-  const tierName = loyalty?.tierName ?? authUser?.tier ?? 'Member';
+  // `tierName` là enum của BE ('None' | 'Bronze' | ...) — chỉ dùng để tra cứu,
+  // luôn render qua getTierLabel.
+  const tierName = loyalty?.tierName ?? authUser?.tier;
   const tierMeta = getTierMeta(tierName);
+  const tierLabel = getTierLabel(tierName);
   const points = loyalty?.pointsBalance ?? authUser?.loyaltyPoints ?? 0;
   const towardVoucher = loyalty?.successfulWashesTowardVoucher ?? 0;
   const washesPerVoucher =
@@ -174,7 +177,7 @@ export function Navbar() {
                               tierMeta.badgeClass,
                             )}
                           >
-                            {tierName}
+                            {tierLabel}
                           </span>
                           <span className='text-primary font-bold text-xs'>
                             {points.toLocaleString()}{' '}
@@ -288,7 +291,7 @@ export function Navbar() {
                       tierMeta.badgeClass,
                     )}
                   >
-                    {tierName}
+                    {tierLabel}
                   </span>
                   <span className='text-foreground/45 text-xs'>
                     {points.toLocaleString()} pts

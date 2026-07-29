@@ -47,6 +47,7 @@ import type {
 } from '@/types/order';
 import { useVouchers } from '@/hooks/vouchers/useVouchers';
 import { Voucher } from '@/types/voucher';
+import { getTierLabel } from '@/constants/tiers';
 import {
   isVoucherApplicableTo,
   isVoucherUsable,
@@ -1562,7 +1563,7 @@ function BookingFlow() {
                           <p className='text-[11px] text-muted-foreground -mt-1'>
                             Khung giờ vàng
                             {preview?.tierName
-                              ? ` · hạng ${preview.tierName} giảm ${preview.tierDiscountPercent}%`
+                              ? ` · hạng ${getTierLabel(preview.tierName)} giảm ${preview.tierDiscountPercent}%`
                               : ` · giảm ${selectedSlotData?.discountPercent}%`}
                           </p>
                         )}
