@@ -19,8 +19,6 @@ import {
 } from '@/lib/admin-api';
 import {
   getShiftId,
-  getStaffName,
-  getRoleLabel,
   getShiftStatus,
   sortShifts,
   isWithinRange,
@@ -34,7 +32,6 @@ import {
   ShiftToolbar,
   type StatusFilter,
   type ShiftView,
-  type RoleOption,
 } from '@/components/admin/shifts/ShiftToolbar';
 import { ShiftTable } from '@/components/admin/shifts/ShiftTable';
 import { ShiftCard } from '@/components/admin/shifts/ShiftCard';
@@ -58,7 +55,6 @@ export default function AdminShiftsPage() {
   // Filter / view state
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRangeKey>('all');
   const [sort, setSort] = useState<SortKey>('latest');
   const [view, setView] = useState<ShiftView>('table');
@@ -207,16 +203,6 @@ export default function AdminShiftsPage() {
     });
   };
 
-  // ─── Role filter options (dynamic từ data) ────────────────────────
-  const roleOptions: RoleOption[] = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of shifts) if (s.shiftType) set.add(s.shiftType);
-    return [
-      { value: 'all', label: 'Tất cả vai trò' },
-      ...Array.from(set).map((t) => ({ value: t, label: getRoleLabel(t) })),
-    ];
-  }, [shifts]);
-
   // ─── Lọc + sắp xếp ────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -224,13 +210,9 @@ export default function AdminShiftsPage() {
     const list = shifts.filter((s) => {
       const status = getShiftStatus(s);
       if (statusFilter !== 'all' && status !== statusFilter) return false;
-      if (roleFilter !== 'all' && s.shiftType !== roleFilter) return false;
       if (!isWithinRange(s, dateRange)) return false;
       if (term) {
         const haystack = [
-          getStaffName(s, staffList) ?? '',
-          getRoleLabel(s.shiftType),
-          s.stationName ?? '',
           s.note ?? '',
           STATUS_META[status].label,
         ]
@@ -242,7 +224,7 @@ export default function AdminShiftsPage() {
     });
 
     return sortShifts(list, sort);
-  }, [shifts, staffList, statusFilter, roleFilter, dateRange, search, sort]);
+  }, [shifts, statusFilter, dateRange, search, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -254,7 +236,6 @@ export default function AdminShiftsPage() {
   const hasFilters =
     search.trim() !== '' ||
     statusFilter !== 'all' ||
-    roleFilter !== 'all' ||
     dateRange !== 'all';
 
   // Đổi bộ lọc/sắp xếp thì quay về trang 1 để không rơi vào trang rỗng.
@@ -265,10 +246,6 @@ export default function AdminShiftsPage() {
   };
   const handleStatus = (v: StatusFilter) => {
     setStatusFilter(v);
-    setPage(1);
-  };
-  const handleRole = (v: string) => {
-    setRoleFilter(v);
     setPage(1);
   };
   const handleDateRange = (v: DateRangeKey) => {
@@ -283,7 +260,6 @@ export default function AdminShiftsPage() {
   const resetFilters = () => {
     setSearch('');
     setStatusFilter('all');
-    setRoleFilter('all');
     setDateRange('all');
     setPage(1);
   };
@@ -294,7 +270,6 @@ export default function AdminShiftsPage() {
         <ShiftCard
           key={getShiftId(shift)}
           shift={shift}
-          staffList={staffList}
           onEdit={(s) => setEditShift(s)}
           onCancelRequest={(s) => setCancelTarget(s)}
         />
@@ -363,9 +338,6 @@ export default function AdminShiftsPage() {
             onSearchChange={handleSearch}
             status={statusFilter}
             onStatusChange={handleStatus}
-            role={roleFilter}
-            onRoleChange={handleRole}
-            roleOptions={roleOptions}
             dateRange={dateRange}
             onDateRangeChange={handleDateRange}
             sort={sort}
@@ -433,7 +405,6 @@ export default function AdminShiftsPage() {
               <div className='hidden md:block'>
                 <ShiftTable
                   shifts={paged}
-                  staffList={staffList}
                   onEdit={(s) => setEditShift(s)}
                   onCancelRequest={(s) => setCancelTarget(s)}
                 />

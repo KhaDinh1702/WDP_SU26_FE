@@ -10,19 +10,13 @@ import type {
 } from '@/lib/shift-helpers';
 
 export type StatusFilter = ShiftStatusKey | 'all';
-export type RoleFilter = string;
 export type ShiftView = 'table' | 'card';
-
-export type RoleOption = { value: string; label: string };
 
 type ShiftToolbarProps = {
   search: string;
   onSearchChange: (v: string) => void;
   status: StatusFilter;
   onStatusChange: (v: StatusFilter) => void;
-  role: RoleFilter;
-  onRoleChange: (v: RoleFilter) => void;
-  roleOptions: RoleOption[];
   dateRange: DateRangeKey;
   onDateRangeChange: (v: DateRangeKey) => void;
   sort: SortKey;
@@ -94,9 +88,6 @@ export function ShiftToolbar({
   onSearchChange,
   status,
   onStatusChange,
-  role,
-  onRoleChange,
-  roleOptions,
   dateRange,
   onDateRangeChange,
   sort,
@@ -139,12 +130,6 @@ export function ShiftToolbar({
             value={status}
             onChange={onStatusChange}
             options={STATUS_OPTIONS}
-          />
-          <FilterSelect
-            label='Lọc theo vai trò'
-            value={role}
-            onChange={onRoleChange}
-            options={roleOptions}
           />
           <FilterSelect
             label='Lọc theo thời gian'

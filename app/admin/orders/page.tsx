@@ -11,7 +11,6 @@ interface OrderData {
   id?: string;
   userId?: { fullName?: string };
   customerName?: string;
-  bookingId?: { _id?: string } | string;
   amount?: number | string;
   paymentMethod?: string;
   paymentStatus?: string;
@@ -63,7 +62,7 @@ export default function AdminOrdersPage() {
               <table className='w-full text-sm'>
                 <thead>
                   <tr className='bg-muted/50 border-b border-border/50'>
-                    {['ID', 'Khách hàng', 'Booking', 'Số tiền', 'Phương thức', 'Trạng thái', 'Ngày tạo'].map((h) => (
+                    {['ID', 'Khách hàng', 'Số tiền', 'Phương thức', 'Trạng thái', 'Ngày tạo'].map((h) => (
                       <th key={h} className='text-left px-5 py-3.5 text-[11px] font-semibold uppercase tracking-widest text-foreground/60'>{h}</th>
                     ))}
                   </tr>
@@ -82,7 +81,6 @@ export default function AdminOrdersPage() {
                       <tr key={id} className='hover:bg-muted/20 transition-colors'>
                         <td className='px-5 py-4 font-mono text-xs text-foreground/50'>{id.slice(-6).toUpperCase()}</td>
                         <td className='px-5 py-4 font-semibold text-foreground'>{o.userId?.fullName ?? o.customerName ?? '-'}</td>
-                        <td className='px-5 py-4 font-mono text-xs text-foreground/50'>{(typeof o.bookingId === 'object' ? o.bookingId?._id : o.bookingId)?.toString().slice(-6).toUpperCase() ?? '-'}</td>
                         <td className='px-5 py-4 font-semibold text-foreground'>{o.amount != null ? `${Number(o.amount).toLocaleString('vi-VN')}đ` : '-'}</td>
                         <td className='px-5 py-4 text-foreground/60 capitalize'>{o.paymentMethod ?? '-'}</td>
                         <td className='px-5 py-4'>
