@@ -99,44 +99,15 @@ export function RescheduleOrderModal({
   const { data: availableSlots = [], isLoading: isLoadingSlots } =
     useAvailableSlots(slotQueryParams);
 
-  // BE yêu cầu staffShiftId khi reschedule nhưng available-slots không trả về
-  // → tìm ca washer còn chỗ phủ đúng giờ đã chọn qua /shifts/available.
-  const findShiftForSlot = async (targetTime: string) => {
-    const dateOnly = targetTime.split('T')[0];
-    const { getAvailableShifts } = await import('@/lib/customer-api');
-    const res = await getAvailableShifts({
-      from: `${dateOnly}T00:00:00.000Z`,
-      to: `${dateOnly}T23:59:59.000Z`,
-      shiftType: 'washer',
-    });
-    const shifts = res.data || [];
-    const targetDate = new Date(targetTime).getTime();
-    return shifts.filter(
-      (s: { startAt: string; endAt: string; currentBookings?: number; maxBookings?: number }) => {
-        const start = new Date(s.startAt).getTime();
-        const end = new Date(s.endAt).getTime();
-        return (
-          targetDate >= start &&
-          targetDate < end &&
-          (s.currentBookings ?? 0) < (s.maxBookings ?? 0)
-        );
-      },
-    );
-  };
-
   const handleSubmit = async () => {
     if (!rescheduleSlot) return;
     try {
       toast.loading('Đang xử lý đổi lịch...');
-      const shifts = await findShiftForSlot(rescheduleSlot);
-      if (!shifts || shifts.length === 0) {
-        toast.dismiss();
-        toast.error('Không tìm thấy ca trực trống tương ứng.');
-        return;
-      }
+      // Ca trực là ẩn danh: khách chọn giờ, BE tự tìm ca còn chỗ phủ giờ đó
+      // (giống lúc đặt lịch). FE không đoán ca nữa.
       await rescheduleMutation.mutateAsync({
         id: order.id,
-        data: { staffShiftId: shifts[0].id, scheduledAt: rescheduleSlot },
+        data: { scheduledAt: rescheduleSlot },
       });
       toast.dismiss();
       toast.success('Đã đổi lịch thành công!');
