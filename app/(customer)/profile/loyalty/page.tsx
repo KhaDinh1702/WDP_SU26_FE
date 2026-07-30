@@ -1,8 +1,9 @@
 'use client';
 
-import { getMyLoyalty, getTierConfigs } from '@/lib/customer-api';
-import { LoyaltyAccount, TierConfig } from '@/types/loyalty';
+import { getTierConfigs } from '@/lib/customer-api';
+import { TierConfig } from '@/types/loyalty';
 import { useQuery } from '@tanstack/react-query';
+import { useMyLoyalty } from '@/hooks/orders/useOrders';
 import {
   Crown,
   Sparkles,
@@ -23,21 +24,16 @@ import { getTierLabel } from '@/constants/tiers';
 export default function LoyaltyPage() {
   // ─── React Query ─────────────────────────────────────────
   const {
-    data: loyaltyData,
+    data: loyalty = null,
     isLoading: isLoyaltyLoading,
     error: loyaltyError,
-  } = useQuery({
-    queryKey: ['my-loyalty'],
-    queryFn: getMyLoyalty,
-  });
+  } = useMyLoyalty();
 
   const { data: tierConfigsData, isLoading: isTiersLoading } = useQuery({
     queryKey: ['tier-configs'],
     queryFn: getTierConfigs,
   });
 
-  const loyalty: LoyaltyAccount | null =
-    loyaltyData?.data?.data ?? loyaltyData?.data ?? null;
   const tiers: TierConfig[] =
     tierConfigsData?.data?.data ?? tierConfigsData?.data ?? [];
 

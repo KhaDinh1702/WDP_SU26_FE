@@ -14,7 +14,7 @@ const CHECKLIST = [
   'Máy rửa xe chuyên nghiệp nhập khẩu',
   'Hóa chất sinh học, an toàn cho sơn xe',
   'Đội ngũ kỹ thuật viên được chứng nhận',
-  'Cam kết hài lòng 100% hoặc hoàn tiền',
+  'Cam kết hài lòng 100% hoặc rửa lại miễn phí',
 ];
 
 export function AboutSection() {

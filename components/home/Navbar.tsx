@@ -26,10 +26,8 @@ import { cn } from '@/lib/utils';
 import { getTierMeta, getTierLabel } from '@/constants';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { getInitials } from '@/lib/format';
-import { useQuery } from '@tanstack/react-query';
 import { useLogout } from '@/hooks/auth/useLogout';
-import { getMyLoyalty } from '@/lib/customer-api';
-import type { LoyaltyAccount } from '@/types/loyalty';
+import { useMyLoyalty } from '@/hooks/orders/useOrders';
 
 /**
  * Dự phòng khi chưa tải xong GET /me/loyalty. Mốc thật do BE trả về theo hạng
@@ -49,16 +47,11 @@ export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const handleLogout = useLogout();
 
-  // Lấy dữ liệu loyalty thật (cùng query key với trang loyalty -> dùng chung
-  // cache, không gọi API thừa). Điểm và tiến độ rửa lấy từ đây thay vì
-  // authUser (vốn chỉ set lúc đăng nhập nên hay lệch / bằng 0).
-  const { data: loyaltyData } = useQuery({
-    queryKey: ['my-loyalty'],
-    queryFn: getMyLoyalty,
-    enabled: !!authUser,
-  });
-  const loyalty: LoyaltyAccount | null =
-    loyaltyData?.data?.data ?? loyaltyData?.data ?? null;
+  // Dùng chung hook (và cache) với trang loyalty nên không gọi API thừa và
+  // không còn hai kiểu dữ liệu ghi đè nhau trên key `['my-loyalty']`. Điểm và
+  // tiến độ rửa lấy từ đây thay vì authUser (vốn chỉ set lúc đăng nhập nên hay
+  // lệch / bằng 0).
+  const { data: loyalty = null } = useMyLoyalty(!!authUser);
 
   // `tierName` là enum của BE ('None' | 'Bronze' | ...) — chỉ dùng để tra cứu,
   // luôn render qua getTierLabel.

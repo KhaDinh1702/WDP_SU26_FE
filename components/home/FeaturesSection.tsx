@@ -42,7 +42,7 @@ const features = [
   {
     icon: ShieldCheck,
     title: 'Bảo đảm chất lượng',
-    desc: 'Cam kết hoàn tiền hoặc rửa lại miễn phí nếu không đạt tiêu chuẩn. Chất lượng luôn được đặt lên hàng đầu.',
+    desc: 'Cam kết rửa lại miễn phí nếu không đạt tiêu chuẩn. Chất lượng luôn được đặt lên hàng đầu.',
     color: 'bg-rose-50 text-rose-600',
   },
 ];

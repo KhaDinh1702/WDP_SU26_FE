@@ -21,7 +21,6 @@ import {
   Layers,
   Sparkles,
   TrendingDown,
-  Undo2,
   Users,
   Wrench,
 } from 'lucide-react';
@@ -146,8 +145,7 @@ export default function AdminDashboardPage() {
 
 function DashboardBody({ report }: { report: DashboardReport }) {
   const { overview, revenue, bookings, washers, customers } = report;
-  const { vehicles, voucherLoyalty, services, refundDispute, schedule } =
-    report;
+  const { vehicles, voucherLoyalty, services, schedule } = report;
   const inProgressBookings = bookings.statusSummary['in_progress'] ?? 0;
   // "Đang chờ xử lý" không gồm số đang rửa để tránh đếm trùng trong biểu đồ.
   const waitingBookings = Math.max(
@@ -170,7 +168,7 @@ function DashboardBody({ report }: { report: DashboardReport }) {
               <KpiCard
                 label='Doanh thu thực nhận'
                 value={formatCurrency(overview.netRevenue)}
-                hint='Sau giảm giá & hoàn tiền'
+                hint='Sau giảm giá'
                 icon={CircleDollarSign}
                 tone='success'
               />
@@ -243,21 +241,13 @@ function DashboardBody({ report }: { report: DashboardReport }) {
             }
           >
         <div className='grid gap-4 lg:grid-cols-3'>
-          <Panel
-            title='Cơ cấu doanh thu'
-            hint='Net = Gộp − Giảm giá − Hoàn tiền'
-          >
+          <Panel title='Cơ cấu doanh thu' hint='Net = Gộp − Giảm giá'>
             <dl className='flex flex-col gap-3 text-sm'>
               <RevenueRow label='Doanh thu gộp' value={revenue.gross} />
               <RevenueRow
                 label='Giảm giá'
                 value={-revenue.discount}
                 tone='warning'
-              />
-              <RevenueRow
-                label='Hoàn tiền'
-                value={-revenue.refund}
-                tone='destructive'
               />
               <div className='mt-1 flex items-center justify-between border-t border-border pt-3'>
                 <dt className='font-semibold text-foreground'>
@@ -584,8 +574,8 @@ function DashboardBody({ report }: { report: DashboardReport }) {
           </DetailGroupCard>
 
           <DetailGroupCard
-            title='Voucher & Hoàn tiền'
-            subtitle='Bấm để xem số phát hành, đã dùng, hoàn tiền'
+            title='Voucher'
+            subtitle='Bấm để xem số phát hành, đã dùng, hết hạn'
             icon={Gift}
             preview={
               <DonutChart
@@ -613,11 +603,10 @@ function DashboardBody({ report }: { report: DashboardReport }) {
                 tone='success'
               />
               <KpiCard
-                label='Số đơn hoàn tiền'
-                value={formatNumber(refundDispute.refundCount)}
-                hint={`Tổng ${formatCurrency(refundDispute.refundAmount)}`}
-                icon={Undo2}
-                tone='destructive'
+                label='Hết hạn'
+                value={formatNumber(voucherLoyalty.expired)}
+                icon={Gift}
+                tone='warning'
               />
             </div>
           </DetailGroupCard>

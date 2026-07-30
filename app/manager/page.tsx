@@ -44,7 +44,6 @@ import {
   Layers,
   RotateCcw,
   TrendingDown,
-  Undo2,
   UserPlus,
   Wrench,
 } from 'lucide-react';
@@ -347,7 +346,7 @@ function AlertCard({
 /* ── Thân báo cáo vận hành (đồng bộ bộ lọc thời gian) ── */
 function ManagerReportBody({ report }: { report: DashboardReport }) {
   const { overview, revenue, bookings, washers, vehicles } = report;
-  const { voucherLoyalty, services, refundDispute, schedule } = report;
+  const { voucherLoyalty, services, schedule } = report;
 
   return (
     <div className='flex flex-col gap-10'>
@@ -362,7 +361,7 @@ function ManagerReportBody({ report }: { report: DashboardReport }) {
           <KpiCard
             label='Doanh thu thực nhận'
             value={formatCurrency(overview.netRevenue)}
-            hint='Sau giảm giá & hoàn tiền'
+            hint='Sau giảm giá'
             icon={CircleDollarSign}
             tone='success'
           />
@@ -621,8 +620,8 @@ function ManagerReportBody({ report }: { report: DashboardReport }) {
           </DetailGroupCard>
 
           <DetailGroupCard
-            title='Voucher & Hoàn tiền'
-            subtitle='Bấm để xem số phát hành, đã dùng, hoàn tiền'
+            title='Voucher'
+            subtitle='Bấm để xem số phát hành, đã dùng, hết hạn'
             icon={Gift}
             preview={
               <DonutChart
@@ -650,11 +649,10 @@ function ManagerReportBody({ report }: { report: DashboardReport }) {
             tone='success'
           />
           <KpiCard
-            label='Số đơn hoàn tiền'
-            value={formatNumber(refundDispute.refundCount)}
-            hint={`Tổng ${formatCurrency(refundDispute.refundAmount)}`}
-            icon={Undo2}
-            tone='destructive'
+            label='Hết hạn'
+            value={formatNumber(voucherLoyalty.expired)}
+            icon={Gift}
+            tone='warning'
           />
         </div>
           </DetailGroupCard>

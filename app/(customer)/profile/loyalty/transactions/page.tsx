@@ -18,9 +18,9 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
-import { getMyLoyalty, getMyLoyaltyTransactions } from '@/lib/customer-api';
+import { getMyLoyaltyTransactions } from '@/lib/customer-api';
+import { useMyLoyalty } from '@/hooks/orders/useOrders';
 import {
-  LoyaltyAccount,
   LoyaltyTransaction,
   LoyaltyTransactionType,
 } from '@/types/loyalty';
@@ -162,10 +162,7 @@ export default function LoyaltyTransactionsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
 
-  const { data: loyaltyData } = useQuery({
-    queryKey: ['my-loyalty'],
-    queryFn: getMyLoyalty,
-  });
+  const { data: loyalty = null } = useMyLoyalty();
 
   const {
     data: transactions = [],
@@ -176,9 +173,6 @@ export default function LoyaltyTransactionsPage() {
     queryKey: ['my-loyalty-transactions', 'all'],
     queryFn: getAllLoyaltyTransactions,
   });
-
-  const loyalty: LoyaltyAccount | null =
-    loyaltyData?.data?.data ?? loyaltyData?.data ?? null;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
