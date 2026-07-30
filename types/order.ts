@@ -94,7 +94,8 @@ export interface AvailableSlot {
 }
 
 export interface RescheduleOrderDto {
-  staffShiftId: string;
+  /** Không bắt buộc — ca ẩn danh, BE tự chọn ca còn chỗ theo giờ đã chọn. */
+  staffShiftId?: string;
   scheduledAt: string; // ISO string
 }
 

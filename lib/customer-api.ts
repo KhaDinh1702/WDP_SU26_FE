@@ -206,7 +206,7 @@ export const getMyOrderWorkOrder = (orderId: string) =>
 
 export const rescheduleOrder = (
   id: string,
-  data: { staffShiftId: string; scheduledAt: string },
+  data: { staffShiftId?: string; scheduledAt: string },
 ) => axiosInstance.patch(`/me/orders/${id}/reschedule`, data);
 
 export const cancelOrder = (id: string, data: { reason?: string }) =>
