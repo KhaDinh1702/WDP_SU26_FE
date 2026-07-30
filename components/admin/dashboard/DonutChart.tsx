@@ -92,7 +92,7 @@ export function DonutChart({
     // Adapt to the *panel* width (not the viewport): stack donut over legend in
     // narrow columns, sit side-by-side only when the panel is wide enough.
     <div className='@container'>
-    <div className='flex flex-col items-center gap-5 @md:flex-row @md:items-center @md:gap-6'>
+    <div className='mx-auto flex w-full max-w-md flex-col items-center gap-5 @md:flex-row @md:justify-center @md:gap-6'>
       {/* Donut */}
       <div
         className='relative shrink-0'
@@ -187,7 +187,7 @@ export function DonutChart({
       </div>
 
       {/* Legend */}
-      <ul className='flex w-full flex-col gap-2'>
+      <ul className='flex w-full flex-col gap-2 @md:w-64 @md:shrink-0'>
         {slices.map((s, i) => (
           <li
             key={`${s.label}-legend-${i}`}

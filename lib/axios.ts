@@ -13,10 +13,16 @@ export const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     const { accessToken } = useAuthStore.getState();
+    // Endpoint không cần Bearer token (Swagger: không có `security`).
     const publicEndpoints = [
       '/auth/login',
       '/auth/register',
+      '/auth/google',
       '/auth/refresh',
+      '/auth/forgot-password',
+      '/auth/reset-password',
+      '/auth/otp/send',
+      '/auth/otp/verify',
     ];
     const isPublicEndpoint = publicEndpoints.some((endpoint) =>
       config.url?.includes(endpoint),

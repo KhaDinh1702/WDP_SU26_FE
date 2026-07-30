@@ -22,6 +22,11 @@ export const PAYMENT_STATUS = {
   UNPAID: 'unpaid',
   PAID: 'paid',
   REFUNDED: 'refunded',
+  /**
+   * Ưu đãi đã phủ hết giá trị đơn nên không còn gì để thu. Đơn đã tất toán
+   * nhưng BE cố ý KHÔNG tính vào doanh thu.
+   */
+  NO_PAYMENT_REQUIRED: 'no_payment_required',
 } as const;
 
 export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
@@ -33,4 +38,13 @@ export const PAYMENT_STATUS_META: Record<
   unpaid: { label: 'Chưa thanh toán', tone: 'warning' },
   paid: { label: 'Đã thanh toán', tone: 'success' },
   refunded: { label: 'Đã hoàn tiền', tone: 'muted' },
+  no_payment_required: { label: 'Không cần thanh toán', tone: 'success' },
 };
+
+/** Đơn đã tất toán: khách không còn phải trả gì nữa. */
+export function isSettledPayment(status: PaymentStatus): boolean {
+  return (
+    status === PAYMENT_STATUS.PAID ||
+    status === PAYMENT_STATUS.NO_PAYMENT_REQUIRED
+  );
+}

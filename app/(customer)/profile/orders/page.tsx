@@ -27,8 +27,10 @@ import {
   RescheduleOrderModal,
   CancelOrderModal,
   FeedbackOrderModal,
+  OrderPhotoLightbox,
   CustomerVehicle,
 } from '@/components/orders/OrderModals';
+import { OrderWashPhotos } from '@/components/orders/OrderWashPhotos';
 import { cn } from '@/lib/utils';
 import {
   formatCurrency,
@@ -39,6 +41,7 @@ import {
   ORDER_STATUS_META,
   PAYMENT_STATUS_META,
   isCancellableByCustomer,
+  isSettledPayment,
 } from '@/constants';
 import { Order, OrderStatus } from '@/types/order';
 
@@ -78,8 +81,8 @@ const TAB_GROUPS: { id: string; label: string; statuses: OrderStatus[] }[] = [
 ];
 
 const SORT_OPTIONS = [
+  { id: 'soonest', label: 'Ngày giờ sớm nhất' },
   { id: 'priority', label: 'Ưu tiên xử lý' },
-  { id: 'soonest', label: 'Lịch gần nhất' },
   { id: 'newest', label: 'Mới tạo gần đây' },
   { id: 'oldest', label: 'Cũ nhất' },
   { id: 'price-desc', label: 'Giá cao → thấp' },
@@ -109,6 +112,9 @@ export default function MyOrdersPage() {
   const [vehicles, setVehicles] = useState<CustomerVehicle[]>([]);
 
   const [activeTab, setActiveTab] = useState('all');
+  // Mặc định "Ưu tiên xử lý": đơn cần hành động lên đầu, lịch sử xuống cuối và
+  // mới nhất trước. Nếu mặc định là "sớm nhất" thì đơn cũ nhất trong lịch sử sẽ
+  // chiếm đầu danh sách, khiến khách tưởng đó là đơn vừa đặt.
   const [sortBy, setSortBy] = useState<SortId>('priority');
   // ?q= cho phép trang khác (VD: card xe) deep-link thẳng vào kết quả lọc.
   const [searchQuery, setSearchQuery] = useState(
@@ -128,6 +134,12 @@ export default function MyOrdersPage() {
     }
     return {};
   });
+
+  // Ảnh trước/sau khi rửa đang được phóng to.
+  const [photoPreview, setPhotoPreview] = useState<{
+    photos: string[];
+    index: number;
+  } | null>(null);
 
   // Fetch customer vehicles for name representation
   useEffect(() => {
@@ -165,6 +177,14 @@ export default function MyOrdersPage() {
     return service?.name || 'Gói dịch vụ';
   };
 
+  /**
+   * Tên dịch vụ của một đơn. Ưu tiên `serviceName` BE trả kèm đơn: danh sách
+   * `/service-types` chỉ có dịch vụ ĐANG hoạt động, nên đơn cũ đặt bằng dịch vụ
+   * đã ngưng sẽ tra không ra và rơi về nhãn chung "Gói dịch vụ".
+   */
+  const serviceNameOf = (order: Order) =>
+    order.serviceName || getServiceName(order.serviceTypeId);
+
   const getVehicleInfo = (id: string) => {
     const vehicle = vehicles.find((v) => (v._id || v.id) === id);
     if (!vehicle) return { name: 'Phương tiện', plate: '' };
@@ -197,9 +217,10 @@ export default function MyOrdersPage() {
       const qPlate = q.replace(/[^a-z0-9]/g, '');
       result = result.filter((o: Order) => {
         const vInfo = getVehicleInfo(o.vehicleId);
-        const plateNorm = vInfo.plate.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const plate = vInfo.plate || o.licensePlate || '';
+        const plateNorm = plate.toLowerCase().replace(/[^a-z0-9]/g, '');
         return (
-          getServiceName(o.serviceTypeId).toLowerCase().includes(q) ||
+          serviceNameOf(o).toLowerCase().includes(q) ||
           vInfo.name.toLowerCase().includes(q) ||
           (qPlate.length > 0 && plateNorm.includes(qPlate))
         );
@@ -457,10 +478,21 @@ export default function MyOrdersPage() {
 
           {pagedOrders.map((order: Order) => {
             const vInfo = getVehicleInfo(order.vehicleId);
+            // Biển số BE trả kèm đơn là ảnh chụp tại thời điểm đặt - vẫn đúng cả
+            // khi xe đã bị xoá khỏi danh sách phương tiện.
+            const plate = vInfo.plate || order.licensePlate || '';
             const statusMeta = ORDER_STATUS_META[order.status];
             const paymentMeta = PAYMENT_STATUS_META[order.paymentStatus];
             const isPendingPayment = order.status === 'pending_payment';
             const canModify = isCancellableByCustomer(order.status);
+            // BE quyết định đơn có được chấm điểm hay không (`canRate`) và đã
+            // chấm chưa (`alreadyRated`) - không suy từ mỗi trạng thái đơn.
+            const alreadyRated =
+              order.alreadyRated === true || !!submittedFeedbacks[order.id];
+            const canRate = order.canRate === true && !alreadyRated;
+            // Chỉ đơn đã có phiếu rửa mới có ảnh - tránh gọi thừa API cho đơn
+            // chưa từng check-in.
+            const hasWorkOrder = !!order.workOrderStatus;
 
             const timeStr = new Date(order.scheduledAt).toLocaleTimeString(
               'vi-VN',
@@ -483,22 +515,22 @@ export default function MyOrdersPage() {
                 <Link
                   href={`/profile/orders/${order.id}`}
                   className='absolute inset-0 z-0'
-                  aria-label={`Xem chi tiết lịch hẹn ${getServiceName(order.serviceTypeId)} ngày ${dateStr}`}
+                  aria-label={`Xem chi tiết lịch hẹn ${serviceNameOf(order)} ngày ${dateStr}`}
                 />
                 <CardContent className='p-4 sm:p-5 space-y-3 pointer-events-none'>
                   {/* Dòng 1: dịch vụ + trạng thái */}
                   <div className='flex flex-wrap items-start justify-between gap-2'>
                     <div className='min-w-0'>
                       <h3 className='font-bold text-sm text-foreground leading-snug'>
-                        {getServiceName(order.serviceTypeId)}
+                        {serviceNameOf(order)}
                       </h3>
                       <p className='text-xs text-muted-foreground mt-0.5'>
                         {vInfo.name}
-                        {vInfo.plate && (
+                        {plate && (
                           <>
                             {' · '}
                             <span className='font-mono font-semibold text-foreground/80'>
-                              {formatLicensePlate(vInfo.plate)}
+                              {formatLicensePlate(plate)}
                             </span>
                           </>
                         )}
@@ -521,14 +553,14 @@ export default function MyOrdersPage() {
                         ? 'Chuyển khoản'
                         : 'Tiền mặt'}
                       {' · '}
+                      {/* `no_payment_required` = ưu đãi phủ hết đơn, coi như đã tất toán. */}
                       <span
                         className={cn(
                           'font-semibold',
-                          order.paymentStatus === 'paid'
+                          isSettledPayment(order.paymentStatus) ||
+                            Number(order.amount) === 0
                             ? 'text-success'
-                            : Number(order.amount) === 0
-                              ? 'text-success'
-                              : 'text-foreground',
+                            : 'text-foreground',
                         )}
                       >
                         {Number(order.amount) === 0
@@ -540,6 +572,18 @@ export default function MyOrdersPage() {
                       {formatCurrency(order.amount)}
                     </span>
                   </div>
+
+                  {/* Ảnh hiện trạng xe trước & sau khi rửa. Tự ẩn nếu chưa có ảnh. */}
+                  {hasWorkOrder && (
+                    <div className='pointer-events-auto relative z-10'>
+                      <OrderWashPhotos
+                        orderId={order.id}
+                        onPreview={(photos, index) =>
+                          setPhotoPreview({ photos, index })
+                        }
+                      />
+                    </div>
+                  )}
 
                   {/* Dòng 3: hành động theo ngữ cảnh + xem chi tiết */}
                   <div className='flex flex-wrap items-center gap-2 border-t border-border/60 pt-3 pointer-events-auto relative z-10'>
@@ -555,23 +599,26 @@ export default function MyOrdersPage() {
                       </Button>
                     )}
 
-                    {order.status === 'completed' &&
-                      !submittedFeedbacks[order.id] && (
-                        <Button
-                          size='sm'
-                          onClick={() => setFeedbackOrder(order)}
-                          className='bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-xs font-bold h-8 px-3.5 cursor-pointer shadow-xs'
-                        >
-                          Đánh giá dịch vụ
-                        </Button>
-                      )}
+                    {canRate && (
+                      <Button
+                        size='sm'
+                        onClick={() => setFeedbackOrder(order)}
+                        className='bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-xs font-bold h-8 px-3.5 cursor-pointer shadow-xs'
+                      >
+                        Đánh giá dịch vụ
+                      </Button>
+                    )}
 
-                    {order.status === 'completed' &&
-                      submittedFeedbacks[order.id] && (
-                        <span className='text-xs font-semibold text-success inline-flex items-center gap-1'>
-                          <CheckCircle className='w-3.5 h-3.5' /> Đã gửi đánh giá
-                        </span>
-                      )}
+                    {alreadyRated && (
+                      <span className='text-xs font-semibold text-success inline-flex items-center gap-1'>
+                        <CheckCircle className='w-3.5 h-3.5' /> Đã gửi đánh giá
+                        {typeof order.orderRating === 'number' && (
+                          <span className='font-bold'>
+                            · {order.orderRating}★
+                          </span>
+                        )}
+                      </span>
+                    )}
 
                     {canModify && (
                       <>
@@ -620,7 +667,7 @@ export default function MyOrdersPage() {
         <RescheduleOrderModal
           order={reschedulingOrder}
           vehicles={vehicles}
-          serviceName={getServiceName(reschedulingOrder.serviceTypeId)}
+          serviceName={serviceNameOf(reschedulingOrder)}
           onClose={() => setReschedulingOrder(null)}
           onDone={() => refetch()}
         />
@@ -640,6 +687,17 @@ export default function MyOrdersPage() {
           washerName={feedbackOrder.assignedWasherName}
           onClose={() => setFeedbackOrder(null)}
           onDone={() => markFeedbackSubmitted(feedbackOrder.id)}
+        />
+      )}
+
+      {photoPreview && (
+        <OrderPhotoLightbox
+          photos={photoPreview.photos}
+          index={photoPreview.index}
+          onClose={() => setPhotoPreview(null)}
+          onChangeIndex={(next) =>
+            setPhotoPreview((p) => (p ? { ...p, index: next } : p))
+          }
         />
       )}
     </div>

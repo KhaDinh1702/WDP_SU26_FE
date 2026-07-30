@@ -1,7 +1,6 @@
 'use client';
 
 import Image from 'next/image';
-import { Camera } from 'lucide-react';
 
 export function ShowcaseSection() {
   return (
@@ -10,10 +9,6 @@ export function ShowcaseSection() {
       <div className='absolute bottom-0 left-0 w-full h-px bg-linear-to-r from-transparent via-fuchsia-400/30 to-transparent' />
       <div className='max-w-7xl mx-auto relative z-10'>
         <div className='text-center mb-12 sm:mb-16 lg:mb-20'>
-          <div className='inline-flex items-center gap-2 bg-primary/10 text-primary text-[10px] font-black px-4 py-2 rounded-full mb-6 uppercase tracking-[0.2em]'>
-            <Camera className='w-4 h-4' />
-            Visual Excellence
-          </div>
           <h1 className='text-[1.75rem] sm:text-4xl lg:text-5xl font-heading text-foreground leading-[1.15] mb-4 tracking-tight animate-fade-in-up [animation-delay:200ms] opacity-0 fill-mode-forwards'>
             Nghệ Thuật{' '}
             <span className='bg-linear-to-r from-primary via-purple-500 to-fuchsia-500 bg-clip-text text-transparent'>

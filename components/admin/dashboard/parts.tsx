@@ -1,8 +1,16 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import { Inbox } from 'lucide-react';
+import { ArrowUpRight, Inbox } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
 /* ─── Section wrapper ───────────────────────────────────────────────────── */
@@ -42,6 +50,163 @@ export function DashboardSection({
       </div>
       {children}
     </section>
+  );
+}
+
+/* ─── Detail group: card bấm vào mở modal chứa phân tích đầy đủ ─────────── */
+
+export function DetailGroupCard({
+  title,
+  subtitle,
+  icon: Icon,
+  hideModalHeader = false,
+  preview,
+  className,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: LucideIcon;
+  /** Ẩn header modal khi nội dung con đã tự render tiêu đề riêng. */
+  hideModalHeader?: boolean;
+  /**
+   * Biểu đồ tổng quan hiển thị sẵn trên dashboard; bấm vào cả khối để mở
+   * modal chứa các biểu đồ chi tiết còn lại. Không truyền thì hiển thị dạng
+   * card gọn chỉ có tiêu đề.
+   */
+  preview?: ReactNode;
+  className?: string;
+  /** Nội dung phân tích chi tiết, chỉ hiển thị trong modal. */
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type='button'
+        onClick={() => setOpen(true)}
+        className={cn(
+          'group rounded-xl border border-border bg-card text-left shadow-xs transition-colors hover:border-primary/40',
+          preview ? 'flex w-full flex-col' : 'flex items-center gap-3 p-4',
+          className,
+        )}
+      >
+        {preview ? (
+          <>
+            <span className='flex items-center gap-3 border-b border-border px-5 py-3.5'>
+              {Icon && (
+                <span className='flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary'>
+                  <Icon className='size-4' />
+                </span>
+              )}
+              <span className='min-w-0 flex-1'>
+                <span className='block text-sm font-bold text-foreground'>
+                  {title}
+                </span>
+                {subtitle && (
+                  <span className='mt-0.5 block truncate text-xs text-muted-foreground'>
+                    {subtitle}
+                  </span>
+                )}
+              </span>
+              <span className='inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary'>
+                Xem chi tiết
+                <ArrowUpRight className='size-3.5' />
+              </span>
+            </span>
+            <span className='pointer-events-none block p-5'>{preview}</span>
+          </>
+        ) : (
+          <>
+            {Icon && (
+              <span className='flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary'>
+                <Icon className='size-5' />
+              </span>
+            )}
+            <span className='min-w-0 flex-1'>
+              <span className='block text-sm font-semibold text-foreground'>
+                {title}
+              </span>
+              {subtitle && (
+                <span className='mt-0.5 block truncate text-xs text-muted-foreground'>
+                  {subtitle}
+                </span>
+              )}
+            </span>
+            <ArrowUpRight className='size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary' />
+          </>
+        )}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className='max-h-[85vh] overflow-y-auto sm:max-w-4xl'>
+          <DialogHeader className={hideModalHeader ? 'sr-only' : undefined}>
+            <DialogTitle>{title}</DialogTitle>
+            {subtitle && <DialogDescription>{subtitle}</DialogDescription>}
+          </DialogHeader>
+          <div className='flex flex-col gap-4'>{children}</div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/* ─── Biểu đồ doanh thu theo ngày (dùng chung admin/manager) ────────────── */
+
+export function DayRevenueChart({
+  data,
+  formatValue,
+}: {
+  data: { key: string; revenue: number; orders: number }[];
+  formatValue: (v: number) => string;
+}) {
+  const max = Math.max(...data.map((d) => d.revenue), 1);
+  return (
+    <div
+      className='flex items-end gap-1.5 overflow-x-auto'
+      style={{ height: 160 }}
+    >
+      {data.map((d) => {
+        const height = Math.max((d.revenue / max) * 100, 3);
+        const label = d.key.slice(5); // MM-DD
+        return (
+          <div
+            key={d.key}
+            className='group flex min-w-4.5 max-w-16 flex-1 flex-col items-center justify-end'
+            style={{ height: '100%' }}
+            title={`${d.key}: ${formatValue(d.revenue)} (${d.orders} đơn)`}
+          >
+            <div
+              className='w-full rounded-t-sm bg-primary/70 transition-colors group-hover:bg-primary'
+              style={{ height: `${height}%` }}
+            />
+            <span className='mt-1 rotate-0 whitespace-nowrap text-[9px] text-muted-foreground'>
+              {label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Secondary inline stats (hàng chỉ số phụ, không dùng card) ─────────── */
+
+export function InlineStats({
+  items,
+}: {
+  items: { label: string; value: string }[];
+}) {
+  return (
+    <div className='flex flex-wrap items-center gap-x-6 gap-y-1.5 rounded-xl border border-border/60 bg-muted/30 px-4 py-2.5'>
+      {items.map((it) => (
+        <span key={it.label} className='text-xs text-muted-foreground'>
+          {it.label}:{' '}
+          <span className='font-semibold text-foreground tabular-nums'>
+            {it.value}
+          </span>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -215,6 +380,7 @@ export function RankingTable<T>({
                     : c.align === 'center'
                       ? 'text-center'
                       : 'text-left',
+                  c.className,
                 )}
               >
                 {c.header}

@@ -1,5 +1,6 @@
 import { axiosInstance } from '@/lib/axios';
 import { ENDPOINTS } from '@/services/endpoints';
+import type { WasherFeedbackList, WasherFeedbackSummary } from '@/types/washer';
 
 /**
  * Lấy danh sách Work Orders được phân công cho thợ rửa xe hiện tại
@@ -30,3 +31,15 @@ export const washerFinishWorkOrder = (id: string, checkoutPhotos: string[]) =>
  */
 export const washerGetSchedule = (params?: { date?: string; from?: string; to?: string; status?: string }) =>
   axiosInstance.get(ENDPOINTS.washerSchedule.me, { params });
+
+/**
+ * Danh sách đánh giá của khách về chính thợ đang đăng nhập
+ */
+export const washerGetFeedback = (params?: { page?: number; limit?: number }) =>
+  axiosInstance.get<WasherFeedbackList>(ENDPOINTS.washerFeedback.list, { params });
+
+/**
+ * Điểm trung bình + phân bố sao của chính thợ đang đăng nhập
+ */
+export const washerGetFeedbackSummary = () =>
+  axiosInstance.get<WasherFeedbackSummary>(ENDPOINTS.washerFeedback.summary);

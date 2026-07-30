@@ -1,13 +1,13 @@
 /** Hàm format dùng chung toàn app - locale Việt Nam. */
 
-/** Định dạng tiền tệ VND, ví dụ 150000 -> "150.000 ₫". */
+/**
+ * Định dạng tiền tệ VND, ví dụ 150000 -> "150.000đ".
+ * Dùng chữ "đ" thường thay cho ký hiệu ₫ (glyph gạch chân khó đọc,
+ * người dùng phản ánh nhìn rối) — đổi ở đây là đổi toàn app.
+ */
 export function formatCurrency(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '-';
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-    maximumFractionDigits: 0,
-  }).format(value);
+  return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)}đ`;
 }
 
 /** Định dạng số có dấu phân cách hàng nghìn, ví dụ 15000 -> "15.000". */
@@ -45,6 +45,17 @@ export function formatDateTime(value: string | Date | null | undefined): string 
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/**
+ * Lấy khoá ngày "YYYY-MM-DD" theo GIỜ ĐỊA PHƯƠNG.
+ * Không dùng `toISOString().split('T')[0]`: hàm đó trả về ngày theo UTC nên ở
+ * VN (UTC+7) sẽ ra ngày hôm trước trong khoảng 00:00–06:59.
+ */
+export function toLocalDateKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 /** True nếu ngày (theo lịch) nằm sau hôm nay. Bỏ qua phần giờ. */

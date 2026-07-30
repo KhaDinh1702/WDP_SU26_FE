@@ -40,13 +40,21 @@ import {
   usePreviewOrder,
 } from '@/hooks/orders/useOrders';
 import { cn } from '@/lib/utils';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, toLocalDateKey } from '@/lib/format';
 import type {
   ServiceType as ServiceTypeBase,
   AvailableSlot,
 } from '@/types/order';
 import { useVouchers } from '@/hooks/vouchers/useVouchers';
 import { Voucher } from '@/types/voucher';
+import { getTierLabel } from '@/constants/tiers';
+import {
+  isVoucherApplicableTo,
+  isVoucherUsable,
+  voucherBenefitLabel,
+  voucherMinOrderLabel,
+  voucherTitle,
+} from '@/lib/voucher';
 
 type ServiceTypeItem = ServiceTypeBase & { _id?: string };
 
@@ -185,8 +193,7 @@ function BookingFlow() {
   // Pre-select today or tomorrow as date when step 3 starts
   const goToStep3 = () => {
     if (!selectedDate) {
-      const today = new Date();
-      setSelectedDate(today.toISOString().split('T')[0]);
+      setSelectedDate(toLocalDateKey(new Date()));
     }
     setStep(3);
   };
@@ -208,7 +215,7 @@ function BookingFlow() {
       if (isTomorrow) label = 'Ngày mai';
 
       dates.push({
-        value: current.toISOString().split('T')[0],
+        value: toLocalDateKey(current),
         label,
         day: String(current.getDate()).padStart(2, '0'),
         month: current.getMonth() + 1,
@@ -247,8 +254,9 @@ function BookingFlow() {
   const { data: availableSlots = [], isLoading: isLoadingSlots } =
     useAvailableSlots(slotQueryParams);
 
-  // Realtime: có đơn khác vừa đặt/hủy/dời làm slot thay đổi → tải lại lưới giờ
-  // đang xem để khách không chọn nhầm khung đã kín.
+  // Realtime: slot thay đổi khi có đơn khác vừa đặt/hủy/dời HOẶC khi manager
+  // tạo/hủy ca làm việc (BE bắn chung event `slots:changed`) → tải lại lưới
+  // giờ đang xem để khách không chọn nhầm khung đã kín/đã đóng.
   const qc = useQueryClient();
   useSocketEvent('slots:changed', () => {
     void qc.invalidateQueries({ queryKey: ['available-slots'] });
@@ -269,19 +277,35 @@ function BookingFlow() {
     );
   }, [serviceTypes, selectedServiceId]);
 
-  // ─── Tiến độ voucher rửa miễn phí (mốc 10 lần rửa) ───
+  // ─── Tiến độ voucher thưởng ───
+  // Mốc số lượt rửa giờ do BE quyết định theo hạng thành viên
+  // (`washesRequiredForNextVoucher`); 10 chỉ là dự phòng khi chưa tải xong.
   const { data: myLoyalty } = useMyLoyalty();
-  const WASHES_PER_FREE_VOUCHER = 10; // khớp BE
+  const washesPerVoucher = myLoyalty?.washesRequiredForNextVoucher ?? 10;
   const towardVoucher = myLoyalty?.successfulWashesTowardVoucher ?? 0;
-  const washesToVoucher = Math.max(WASHES_PER_FREE_VOUCHER - towardVoucher, 0);
+  const washesToVoucher =
+    myLoyalty?.washesRemainingForNextVoucher ??
+    Math.max(washesPerVoucher - towardVoucher, 0);
 
   // ─── Voucher & xem trước giá ───
   const { data: myVouchers = [] } = useVouchers('unused');
   // BE đã lọc status=unused và cron tự đẩy voucher hết hạn sang EXPIRED.
-  // Nếu vẫn lọt voucher hết hạn, preview/create sẽ trả voucherError để hiển thị.
+  // Ở đây lọc thêm hai lớp cho khỏi mời khách chọn voucher chắc chắn hỏng:
+  //  - `isVoucherUsable`: bỏ voucher đã quá hạn mà cron chưa quét tới.
+  //  - `isVoucherApplicableTo`: bỏ voucher mà chiến dịch giới hạn dịch vụ/loại xe
+  //    khác với lựa chọn hiện tại (mảng RỖNG = không giới hạn).
+  // Phán quyết cuối vẫn của BE: preview/create trả `voucherError` khi từ chối.
   const validVouchers = useMemo(
-    () => (myVouchers as Voucher[]).filter((v) => v.status === 'unused'),
-    [myVouchers],
+    () =>
+      (myVouchers as Voucher[]).filter(
+        (v) =>
+          isVoucherUsable(v) &&
+          isVoucherApplicableTo(v, {
+            serviceTypeId: selectedServiceId || undefined,
+            vehicleTypeId: selectedVehicle?.vehicleTypeId || undefined,
+          }),
+      ),
+    [myVouchers, selectedServiceId, selectedVehicle],
   );
 
   const serviceVoucherEligible = selectedService
@@ -1114,11 +1138,11 @@ function BookingFlow() {
                       {renderStepTitle(4, 'Thanh toán và xác nhận')}
                     </div>
 
-                    {/* Voucher rửa miễn phí */}
+                    {/* Voucher - mức ưu đãi do chiến dịch của từng voucher quyết định */}
                     {validVouchers.length > 0 && (
                       <div className='space-y-3'>
                         <Label className='text-xs font-medium text-muted-foreground block'>
-                          Voucher rửa miễn phí ({validVouchers.length})
+                          Voucher của bạn ({validVouchers.length})
                         </Label>
 
                         {!serviceVoucherEligible ? (
@@ -1156,14 +1180,17 @@ function BookingFlow() {
                                     setVoucherCodeError('');
                                     setVoucherCodeInput('');
                                     toast.success(
-                                      `Đã áp dụng voucher ${found.code} - giảm tối đa ${formatCurrency(found.discountCapVnd)}`,
+                                      `Đã áp dụng voucher ${found.code} - ${voucherBenefitLabel(found)}`,
                                     );
                                   } else {
+                                    // Ô này chỉ chọn trong voucher ĐÃ thuộc về
+                                    // khách. Mã của lô chung phải nhận về ví
+                                    // trước qua POST /me/vouchers/claim.
                                     setVoucherCodeError(
-                                      'Mã không hợp lệ hoặc không thuộc tài khoản của bạn.',
+                                      'Mã không nằm trong ví của bạn. Nếu là mã khuyến mãi, hãy nhận về ví ở mục "Voucher của tôi" trước.',
                                     );
                                     toast.error(
-                                      'Mã voucher không hợp lệ hoặc không thuộc tài khoản của bạn.',
+                                      'Mã voucher không có trong ví của bạn.',
                                     );
                                   }
                                 }}
@@ -1208,16 +1235,21 @@ function BookingFlow() {
                                     <Ticket className='w-4 h-4' />
                                   </div>
                                   <div className='flex-1 min-w-0'>
-                                    <span className='font-semibold font-mono text-sm text-foreground block truncate'>
-                                      {v.code}
+                                    <span className='font-semibold text-sm text-foreground block truncate'>
+                                      {voucherTitle(v)}
                                     </span>
-                                    <span className='text-[11px] text-muted-foreground block'>
-                                      Giảm tối đa{' '}
-                                      {formatCurrency(v.discountCapVnd)} · HSD{' '}
+                                    <span className='text-[11px] text-muted-foreground block truncate'>
+                                      <span className='font-mono'>{v.code}</span>{' '}
+                                      · {voucherBenefitLabel(v)} · HSD{' '}
                                       {new Date(v.expiresAt).toLocaleDateString(
                                         'vi-VN',
                                       )}
                                     </span>
+                                    {voucherMinOrderLabel(v) && (
+                                      <span className='text-[11px] text-muted-foreground block'>
+                                        {voucherMinOrderLabel(v)}
+                                      </span>
+                                    )}
                                   </div>
                                   {isSelected ? (
                                     <Check className='w-4 h-4 text-primary shrink-0' />
@@ -1531,7 +1563,7 @@ function BookingFlow() {
                           <p className='text-[11px] text-muted-foreground -mt-1'>
                             Khung giờ vàng
                             {preview?.tierName
-                              ? ` · hạng ${preview.tierName} giảm ${preview.tierDiscountPercent}%`
+                              ? ` · hạng ${getTierLabel(preview.tierName)} giảm ${preview.tierDiscountPercent}%`
                               : ` · giảm ${selectedSlotData?.discountPercent}%`}
                           </p>
                         )}
@@ -1558,20 +1590,25 @@ function BookingFlow() {
                           Tích lượt rửa nhận voucher
                         </span>
                         <span className='tabular-nums text-foreground'>
-                          {towardVoucher}/{WASHES_PER_FREE_VOUCHER}
+                          {towardVoucher}/{washesPerVoucher}
                         </span>
                       </div>
                       <div className='h-1.5 rounded-full bg-border overflow-hidden'>
                         <div
                           className='h-full rounded-full bg-warning transition-all'
                           style={{
-                            width: `${Math.min((towardVoucher / WASHES_PER_FREE_VOUCHER) * 100, 100)}%`,
+                            width: `${Math.min((towardVoucher / washesPerVoucher) * 100, 100)}%`,
                           }}
                         />
                       </div>
+                      {/* Giá trị voucher kế tiếp do BE tính sẵn theo hạng. */}
                       <p className='mt-1.5 text-[11px] text-muted-foreground'>
                         {washesToVoucher > 0
-                          ? `Còn ${washesToVoucher} lượt rửa hợp lệ để nhận voucher ~5% chi tiêu.`
+                          ? `Còn ${washesToVoucher} lượt rửa hợp lệ để nhận voucher thưởng${
+                              myLoyalty.estimatedNextVoucherVnd
+                                ? ` khoảng ${formatCurrency(myLoyalty.estimatedNextVoucherVnd)}`
+                                : ''
+                            }.`
                           : 'Bạn sắp nhận voucher thưởng!'}
                       </p>
                     </div>

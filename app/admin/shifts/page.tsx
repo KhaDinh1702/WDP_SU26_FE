@@ -12,14 +12,13 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   adminGetShifts,
   adminCreateShift,
+  adminBulkCreateShifts,
   adminUpdateShift,
   adminToggleShift,
-  adminGetShiftStaff,
+  adminGetWasherStatus,
 } from '@/lib/admin-api';
 import {
   getShiftId,
-  getStaffName,
-  getRoleLabel,
   getShiftStatus,
   sortShifts,
   isWithinRange,
@@ -29,12 +28,10 @@ import {
   type DateRangeKey,
   type SortKey,
 } from '@/lib/shift-helpers';
-import { ShiftKpiCards } from '@/components/admin/shifts/ShiftKpiCards';
 import {
   ShiftToolbar,
   type StatusFilter,
   type ShiftView,
-  type RoleOption,
 } from '@/components/admin/shifts/ShiftToolbar';
 import { ShiftTable } from '@/components/admin/shifts/ShiftTable';
 import { ShiftCard } from '@/components/admin/shifts/ShiftCard';
@@ -58,9 +55,8 @@ export default function AdminShiftsPage() {
   // Filter / view state
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRangeKey>('all');
-  const [sort, setSort] = useState<SortKey>('soonest');
+  const [sort, setSort] = useState<SortKey>('latest');
   const [view, setView] = useState<ShiftView>('table');
   const [page, setPage] = useState(1);
 
@@ -76,14 +72,25 @@ export default function AdminShiftsPage() {
     queryFn: () => adminGetShifts({ limit: 100 }),
   });
 
-  // Danh sách nhân viên (washers & cashiers) để gán ca
-  const { data: usersRes } = useQuery({
-    queryKey: ['admin-shifts-staff'],
-    queryFn: async (): Promise<UserData[]> => {
-      const res = await adminGetShiftStaff();
-      return (res.data?.data ?? res.data ?? []) as UserData[];
-    },
+  // Danh sách thợ thật từ /admin/shifts/washer-status — chỉ dùng để hiển thị
+  // tên cho các ca legacy còn staff_id (BE đã bỏ GET /admin/shifts/staff khi
+  // chuyển sang ca ẩn danh theo sức chứa). Giữ nguyên queryKey + shape raw
+  // như WasherStatusMini/Board để dùng chung cache, map sang UserData ở dưới.
+  const { data: washerStatusRes } = useQuery({
+    queryKey: ['washer-status'],
+    queryFn: () => adminGetWasherStatus(),
   });
+  const usersRes: UserData[] = useMemo(
+    () =>
+      (washerStatusRes?.data ?? []).map((w) => ({
+        _id: w.washerId,
+        id: w.washerId,
+        name: w.name,
+        email: w.email,
+        role: 'washer',
+      })) as UserData[],
+    [washerStatusRes],
+  );
 
   const shifts: Shift[] = useMemo(
     () => shiftsRes?.data?.data ?? shiftsRes?.data ?? [],
@@ -99,8 +106,8 @@ export default function AdminShiftsPage() {
       const count = Array.isArray(res?.data) ? res.data.length : 1;
       toast.success(
         count > 1
-          ? `Đã tạo ${count} ca trực: sáng (08:00–12:00) và chiều (14:00–17:00).`
-          : 'Thêm ca trực nhân viên mới thành công!',
+          ? `Đã tạo ${count} ca làm việc: sáng (08:00–12:00) và chiều (14:00–17:00).`
+          : 'Thêm ca làm việc mới thành công!',
       );
       qc.invalidateQueries({ queryKey: ['admin-shifts'] });
       setEditShift(false);
@@ -110,6 +117,38 @@ export default function AdminShiftsPage() {
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         'Đã xảy ra lỗi khi tạo ca trực.';
       toast.error(`Thêm thất bại: ${errMsg}`);
+    },
+  });
+
+  // Tạo ca hàng loạt theo khoảng ngày — POST /admin/shifts/bulk. BE bỏ qua ngày
+  // trùng/đã qua và trả về summary { created, skipped, meta }.
+  const bulkCreateShift = useMutation({
+    mutationFn: adminBulkCreateShifts,
+    onSuccess: (res) => {
+      const meta = res?.data?.meta;
+      const created = meta?.createdCount ?? 0;
+      const skipped = meta?.skippedCount ?? 0;
+      if (created === 0) {
+        toast.warning(
+          skipped > 0
+            ? `Không tạo ca nào — ${skipped} ca bị bỏ qua (đã có ca hoặc đã qua giờ).`
+            : 'Không có ngày nào phù hợp để tạo ca.',
+        );
+      } else {
+        toast.success(
+          skipped > 0
+            ? `Đã tạo ${created} ca, bỏ qua ${skipped} ca (đã có ca hoặc đã qua giờ).`
+            : `Đã tạo ${created} ca làm việc.`,
+        );
+      }
+      qc.invalidateQueries({ queryKey: ['admin-shifts'] });
+      setEditShift(false);
+    },
+    onError: (err: unknown) => {
+      const errMsg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Đã xảy ra lỗi khi tạo ca hàng loạt.';
+      toast.error(`Tạo ca hàng loạt thất bại: ${errMsg}`);
     },
   });
 
@@ -129,15 +168,16 @@ export default function AdminShiftsPage() {
     },
   });
 
-  const toggleShift = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      adminToggleShift(id, status),
+  // Thao tác trạng thái duy nhất còn lại là hủy ca ({ status: 'cancelled' }) —
+  // active/completed do BE tự chuyển theo thời gian.
+  const cancelShift = useMutation({
+    mutationFn: (id: string) => adminToggleShift(id, 'cancelled'),
     onSuccess: () => {
-      toast.success('Cập nhật trạng thái ca trực thành công!');
+      toast.success('Đã hủy ca làm việc.');
       qc.invalidateQueries({ queryKey: ['admin-shifts'] });
     },
     onError: (err: unknown) => {
-      toast.error('Không thể cập nhật ca trực.', {
+      toast.error('Không thể hủy ca làm việc.', {
         description: getErrorMessage(err),
       });
     },
@@ -146,32 +186,22 @@ export default function AdminShiftsPage() {
   const handleSave = (d: Record<string, unknown>) => {
     if (editShift && (editShift as Shift)._id) {
       updateShift.mutate({ id: (editShift as Shift)._id!, data: d });
+    } else if ('fromDate' in d) {
+      // Payload chế độ "Nhiều ngày" từ ShiftModal.
+      bulkCreateShift.mutate(
+        d as unknown as Parameters<typeof adminBulkCreateShifts>[0],
+      );
     } else {
       createShift.mutate(d);
     }
   };
 
-  const handleSetStatus = (shift: Shift, status: string) => {
-    toggleShift.mutate({ id: getShiftId(shift), status });
-  };
-
   const handleCancelConfirm = () => {
     if (!cancelTarget) return;
-    toggleShift.mutate(
-      { id: getShiftId(cancelTarget), status: 'cancelled' },
-      { onSuccess: () => setCancelTarget(null) },
-    );
+    cancelShift.mutate(getShiftId(cancelTarget), {
+      onSuccess: () => setCancelTarget(null),
+    });
   };
-
-  // ─── Role filter options (dynamic từ data) ────────────────────────
-  const roleOptions: RoleOption[] = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of shifts) if (s.shiftType) set.add(s.shiftType);
-    return [
-      { value: 'all', label: 'Tất cả vai trò' },
-      ...Array.from(set).map((t) => ({ value: t, label: getRoleLabel(t) })),
-    ];
-  }, [shifts]);
 
   // ─── Lọc + sắp xếp ────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -180,13 +210,9 @@ export default function AdminShiftsPage() {
     const list = shifts.filter((s) => {
       const status = getShiftStatus(s);
       if (statusFilter !== 'all' && status !== statusFilter) return false;
-      if (roleFilter !== 'all' && s.shiftType !== roleFilter) return false;
       if (!isWithinRange(s, dateRange)) return false;
       if (term) {
         const haystack = [
-          getStaffName(s, staffList) ?? '',
-          getRoleLabel(s.shiftType),
-          s.stationName ?? '',
           s.note ?? '',
           STATUS_META[status].label,
         ]
@@ -198,7 +224,7 @@ export default function AdminShiftsPage() {
     });
 
     return sortShifts(list, sort);
-  }, [shifts, staffList, statusFilter, roleFilter, dateRange, search, sort]);
+  }, [shifts, statusFilter, dateRange, search, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -210,7 +236,6 @@ export default function AdminShiftsPage() {
   const hasFilters =
     search.trim() !== '' ||
     statusFilter !== 'all' ||
-    roleFilter !== 'all' ||
     dateRange !== 'all';
 
   // Đổi bộ lọc/sắp xếp thì quay về trang 1 để không rơi vào trang rỗng.
@@ -221,10 +246,6 @@ export default function AdminShiftsPage() {
   };
   const handleStatus = (v: StatusFilter) => {
     setStatusFilter(v);
-    setPage(1);
-  };
-  const handleRole = (v: string) => {
-    setRoleFilter(v);
     setPage(1);
   };
   const handleDateRange = (v: DateRangeKey) => {
@@ -239,7 +260,6 @@ export default function AdminShiftsPage() {
   const resetFilters = () => {
     setSearch('');
     setStatusFilter('all');
-    setRoleFilter('all');
     setDateRange('all');
     setPage(1);
   };
@@ -250,10 +270,8 @@ export default function AdminShiftsPage() {
         <ShiftCard
           key={getShiftId(shift)}
           shift={shift}
-          staffList={staffList}
           onEdit={(s) => setEditShift(s)}
           onCancelRequest={(s) => setCancelTarget(s)}
-          onSetStatus={handleSetStatus}
         />
       ))}
     </div>
@@ -311,8 +329,8 @@ export default function AdminShiftsPage() {
             </div>
           </div>
 
-          {/* KPI summary */}
-          <ShiftKpiCards shifts={shifts} loading={isLoading} />
+          {/* Trang danh sách không gắn cụm KPI tổng quan — số liệu tổng đã có
+              ở dashboard; bộ lọc trạng thái trên toolbar là đủ để thu hẹp. */}
 
           {/* Toolbar */}
           <ShiftToolbar
@@ -320,9 +338,6 @@ export default function AdminShiftsPage() {
             onSearchChange={handleSearch}
             status={statusFilter}
             onStatusChange={handleStatus}
-            role={roleFilter}
-            onRoleChange={handleRole}
-            roleOptions={roleOptions}
             dateRange={dateRange}
             onDateRangeChange={handleDateRange}
             sort={sort}
@@ -390,10 +405,8 @@ export default function AdminShiftsPage() {
               <div className='hidden md:block'>
                 <ShiftTable
                   shifts={paged}
-                  staffList={staffList}
                   onEdit={(s) => setEditShift(s)}
                   onCancelRequest={(s) => setCancelTarget(s)}
-                  onSetStatus={handleSetStatus}
                 />
               </div>
               <div className='md:hidden'>{cardGrid}</div>
@@ -414,8 +427,11 @@ export default function AdminShiftsPage() {
           item={editShift}
           onClose={() => setEditShift(false)}
           onSave={handleSave}
-          staffList={staffList}
-          isPending={createShift.isPending || updateShift.isPending}
+          isPending={
+            createShift.isPending ||
+            bulkCreateShift.isPending ||
+            updateShift.isPending
+          }
         />
       )}
 
@@ -428,7 +444,7 @@ export default function AdminShiftsPage() {
           if (!open) setCancelTarget(null);
         }}
         onConfirm={handleCancelConfirm}
-        isPending={toggleShift.isPending}
+        isPending={cancelShift.isPending}
       />
     </>
   );

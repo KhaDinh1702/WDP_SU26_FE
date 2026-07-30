@@ -17,6 +17,7 @@ import {
   CancelOrderDto,
   PreviewOrderResponse,
 } from '@/types/order';
+import type { LoyaltyAccount } from '@/types/loyalty';
 
 export const useMyOrders = () => {
   return useQuery({
@@ -170,21 +171,34 @@ export const useActiveServiceTypes = () => {
   });
 };
 
-/** Tài khoản loyalty của khách (điểm + tiến độ voucher rửa miễn phí). */
-export interface MyLoyalty {
-  tierName: string;
-  pointsBalance: number;
-  successfulWashesTowardVoucher: number;
-  totalSuccessfulWashes: number;
-}
+/**
+ * Tài khoản loyalty của khách - `LoyaltyAccountResponse`.
+ * Mốc nhận voucher (`washesRequiredForNextVoucher`) và giá trị voucher kế tiếp
+ * (`estimatedNextVoucherVnd`) do BE tính theo hạng, KHÔNG suy lại ở client.
+ */
+export type MyLoyalty = LoyaltyAccount;
 
-export const useMyLoyalty = () => {
+/**
+ * MỌI chỗ hiển thị hạng/điểm phải dùng hook này, đừng tự khai `useQuery` với
+ * key `['my-loyalty']`: hai queryFn khác nhau trên cùng một key sẽ ghi đè cache
+ * của nhau bằng hai kiểu dữ liệu khác nhau, và màn hình nào đọc sau sẽ nhận
+ * `undefined` (đó là lý do badge hạng ở Navbar tụt về giá trị lúc đăng nhập).
+ *
+ * `refetchOnMount: 'always'` vì điểm và hạng đổi sau mỗi lần rửa xong mà không
+ * có event realtime nào invalidate key này — mở lại trang là có số mới, khỏi F5.
+ */
+export const useMyLoyalty = (enabled = true) => {
   return useQuery({
     queryKey: ['my-loyalty'],
     queryFn: async (): Promise<MyLoyalty | null> => {
       const res = await getMyLoyalty();
       return res.data?.data ?? res.data ?? null;
     },
+    // Navbar hiển thị cả với khách chưa đăng nhập — chỗ đó truyền `!!authUser`
+    // để không gọi API bằng phiên rỗng.
+    enabled,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 };
 

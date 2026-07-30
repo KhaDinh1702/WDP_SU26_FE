@@ -9,13 +9,17 @@ import {
   adminRevokeVoucher,
   adminGetUsers,
   adminGetOrders,
-  type GrantVoucherPayload,
-  type BulkCreateVoucherPayload,
-  type VoucherBatch,
-  type VoucherStats,
 } from '@/lib/admin-api';
+import type {
+  BulkCreateVoucherPayload,
+  GrantVoucherPayload,
+  VoucherBatch,
+  VoucherStats,
+  VoucherStatus,
+} from '@/types/voucher';
 import { getErrorMessage } from '@/lib/getErrorMessage';
 import { formatCurrency } from '@/lib/format';
+import { voucherBenefitLabel, voucherTitle } from '@/lib/voucher';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import {
@@ -32,21 +36,22 @@ import { Voucher } from '@/types/voucher';
 
 type VoucherMode = 'admin' | 'manager';
 
-interface VoucherListResult {
-  data: Voucher[];
-  meta?: { page: number; limit: number; total: number; totalPages: number };
-}
-
 interface CustomerLite {
   id: string;
   name: string;
   email: string;
 }
 
+// `VoucherStatusEnum`: `reserved` = đang giữ cho một đơn chưa hoàn tất;
+// `revoked` = bị quản trị thu hồi sớm và KHÔNG được gộp vào `expired`.
 const statusConfig: Record<string, { label: string; cls: string }> = {
   unused: {
     label: 'Chưa dùng',
     cls: 'bg-success/10 text-success border border-success/30',
+  },
+  reserved: {
+    label: 'Đang giữ',
+    cls: 'bg-warning/10 text-warning border border-warning/30',
   },
   used: {
     label: 'Đã dùng',
@@ -56,13 +61,19 @@ const statusConfig: Record<string, { label: string; cls: string }> = {
     label: 'Hết hạn',
     cls: 'bg-destructive/10 text-destructive border border-destructive/30',
   },
+  revoked: {
+    label: 'Đã thu hồi',
+    cls: 'bg-destructive/10 text-destructive border border-destructive/30',
+  },
 };
 
-const statusTabs: { value: string; label: string }[] = [
+const statusTabs: { value: 'all' | VoucherStatus; label: string }[] = [
   { value: 'all', label: 'Tất cả' },
   { value: 'unused', label: 'Chưa dùng' },
+  { value: 'reserved', label: 'Đang giữ' },
   { value: 'used', label: 'Đã dùng' },
   { value: 'expired', label: 'Hết hạn' },
+  { value: 'revoked', label: 'Đã thu hồi' },
 ];
 
 const fmtDate = (d?: string) =>
@@ -93,6 +104,8 @@ function VoucherCreateModal({
   // Trường dùng chung
   const [discountCapVnd, setDiscountCapVnd] = useState(100000);
   const [expiresAt, setExpiresAt] = useState('');
+  // `reason` được lưu trên voucher để đối soát về sau (5-500 ký tự).
+  const [reason, setReason] = useState('');
 
   // pool
   const [quantity, setQuantity] = useState(10);
@@ -115,10 +128,15 @@ function VoucherCreateModal({
   const quantityValid = quantity >= 1 && quantity <= 1000;
   const prefixValid =
     prefix.trim() === '' || /^[A-Z0-9]{1,15}$/.test(prefix.trim());
-  const codeValid = code.trim() === '' || /^[A-Za-z0-9-]{3,40}$/.test(code.trim());
+  // `GrantVoucherAdmin.code` là `^[A-Z0-9-]{3,30}$` (không phải 40 như mã claim).
+  const codeValid = code.trim() === '' || /^[A-Za-z0-9-]{3,30}$/.test(code.trim());
+  const reasonValid =
+    reason.trim() === '' ||
+    (reason.trim().length >= 5 && reason.trim().length <= 500);
 
   const canSubmit =
     capValid &&
+    reasonValid &&
     (tab === 'pool'
       ? quantityValid && prefixValid
       : customerId.trim().length > 0 && codeValid);
@@ -126,6 +144,7 @@ function VoucherCreateModal({
   const submit = () => {
     if (!canSubmit) return;
     const iso = expiresAt ? new Date(expiresAt).toISOString() : undefined;
+    const reasonPayload = reason.trim() ? { reason: reason.trim() } : {};
     if (tab === 'pool') {
       onSubmit({
         mode: 'pool',
@@ -134,6 +153,7 @@ function VoucherCreateModal({
           discountCapVnd,
           ...(prefix.trim() ? { prefix: prefix.trim().toUpperCase() } : {}),
           ...(iso ? { expiresAt: iso } : {}),
+          ...reasonPayload,
         },
       });
     } else {
@@ -144,6 +164,7 @@ function VoucherCreateModal({
           discountCapVnd,
           ...(iso ? { expiresAt: iso } : {}),
           ...(code.trim() ? { code: code.trim().toUpperCase() } : {}),
+          ...reasonPayload,
         },
       });
     }
@@ -250,9 +271,10 @@ function VoucherCreateModal({
                   <p className='mt-1.5 text-[11px] text-muted-foreground'>
                     Mã sinh ra dạng{' '}
                     <span className='font-mono'>
-                      {(prefix.trim() || 'WASH').toUpperCase()}-YYYYMMDD-0001
-                    </span>
-                    . Đọc mã cho khách để họ tự nhận.
+                      {(prefix.trim() || 'WASH').toUpperCase()}-XXXXXXXXXX
+                    </span>{' '}
+                    (hậu tố ngẫu nhiên, không chạy số). Đọc mã cho khách để họ tự
+                    nhận.
                   </p>
                 )}
               </div>
@@ -348,12 +370,39 @@ function VoucherCreateModal({
                 />
                 {!codeValid && (
                   <p className='mt-1.5 text-[11px] text-destructive'>
-                    Mã chỉ gồm 3-40 ký tự A-Z, 0-9 hoặc dấu gạch ngang.
+                    Mã chỉ gồm 3-30 ký tự A-Z, 0-9 hoặc dấu gạch ngang.
                   </p>
                 )}
               </div>
             </>
           )}
+
+          {/* Lý do (chung) - BE lưu trên voucher để đối soát. */}
+          <div>
+            <label className='block text-xs font-medium text-muted-foreground mb-1.5'>
+              Lý do{' '}
+              <span className='normal-case text-placeholder'>
+                {tab === 'pool'
+                  ? '(bỏ trống = "Lô phát hành <PREFIX>")'
+                  : '(bỏ trống = không ghi chú)'}
+              </span>
+            </label>
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={
+                tab === 'pool'
+                  ? 'VD: Chiến dịch Tết 2026'
+                  : 'VD: Đền bù khiếu nại đơn #1234'
+              }
+              className='w-full border border-input bg-background rounded-lg px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+            />
+            {!reasonValid && (
+              <p className='mt-1.5 text-[11px] text-destructive'>
+                Lý do cần từ 5 đến 500 ký tự.
+              </p>
+            )}
+          </div>
 
           {/* Giảm tối đa (chung) */}
           <div>
@@ -452,10 +501,13 @@ function RevokeModal({
             <X className='w-5 h-5 text-foreground/40' />
           </button>
         </div>
+        {/* BE chuyển voucher sang trạng thái `revoked` RIÊNG, không gộp vào `expired`. */}
         <p className='text-sm text-muted-foreground mb-5'>
           Voucher{' '}
           <span className='font-bold text-foreground'>{voucher.code}</span> sẽ
-          bị chuyển sang trạng thái hết hạn và không dùng được nữa.
+          chuyển sang trạng thái <span className='font-semibold'>đã thu hồi</span>{' '}
+          và không dùng được nữa. Báo cáo thống kê tách riêng khoản này, không
+          tính là hết hạn.
         </p>
 
         <label className='block text-xs font-semibold uppercase tracking-widest text-foreground/40 mb-1.5'>
@@ -494,15 +546,18 @@ function RevokeModal({
 
 // ─────────────────────── KPI tổng voucher ───────────────────────
 function VoucherStatsRow({ stats }: { stats?: VoucherStats }) {
+  // `reserved` và `revoked` là hai chỉ số RIÊNG của BE, không gộp vào chỉ số khác.
   const items: { label: string; value: number; tone: string }[] = [
     { label: 'Tổng phát hành', value: stats?.total ?? 0, tone: 'text-foreground' },
     { label: 'Chưa ai nhận', value: stats?.inPool ?? 0, tone: 'text-muted-foreground' },
     { label: 'Đã nhận, chưa dùng', value: stats?.claimed ?? 0, tone: 'text-primary' },
+    { label: 'Đang giữ cho đơn', value: stats?.reserved ?? 0, tone: 'text-warning' },
     { label: 'Đã dùng', value: stats?.used ?? 0, tone: 'text-success' },
     { label: 'Hết hạn', value: stats?.expired ?? 0, tone: 'text-muted-foreground' },
+    { label: 'Đã thu hồi', value: stats?.revoked ?? 0, tone: 'text-destructive' },
   ];
   return (
-    <div className='mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5'>
+    <div className='mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7'>
       {items.map((it) => (
         <div
           key={it.label}
@@ -620,20 +675,20 @@ function BatchTable({
 export function VoucherManagement({ mode }: { mode: VoucherMode }) {
   const qc = useQueryClient();
   const [view, setView] = useState<'list' | 'batches'>('list');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | VoucherStatus>('all');
   const [page, setPage] = useState(1);
   const [showGrant, setShowGrant] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<Voucher | null>(null);
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['admin-vouchers', mode, statusFilter, page],
-    queryFn: async (): Promise<VoucherListResult> => {
+    queryFn: async () => {
       const res = await adminGetVouchers({
         page,
         limit: 20,
         ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
       });
-      return res.data as VoucherListResult;
+      return res.data;
     },
   });
 
@@ -845,7 +900,8 @@ export function VoucherManagement({ mode }: { mode: VoucherMode }) {
                 <tr className='bg-muted/40 text-left text-xs font-semibold uppercase tracking-wider text-foreground/40'>
                   <th className='px-5 py-3.5'>Mã voucher</th>
                   <th className='px-5 py-3.5'>Khách hàng</th>
-                  <th className='px-5 py-3.5'>Giảm tối đa</th>
+                  <th className='px-5 py-3.5'>Chiến dịch</th>
+                  <th className='px-5 py-3.5'>Ưu đãi</th>
                   <th className='px-5 py-3.5'>Trạng thái</th>
                   <th className='px-5 py-3.5'>Hết hạn</th>
                   <th className='px-5 py-3.5 text-right'>Thao tác</th>
@@ -856,7 +912,7 @@ export function VoucherManagement({ mode }: { mode: VoucherMode }) {
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className='px-5 py-4'
                       >
                         <div className='h-5 bg-muted rounded animate-pulse' />
@@ -866,7 +922,7 @@ export function VoucherManagement({ mode }: { mode: VoucherMode }) {
                 ) : vouchers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className='px-5 py-16 text-center text-muted-foreground'
                     >
                       <Ticket className='w-8 h-8 mx-auto mb-2 text-foreground/20' />
@@ -921,8 +977,21 @@ export function VoucherManagement({ mode }: { mode: VoucherMode }) {
                             );
                           })()}
                         </td>
+                        <td className='px-5 py-3.5 text-foreground/80'>
+                          {v.campaign ? (
+                            <span className='text-xs font-semibold text-foreground'>
+                              {voucherTitle(v)}
+                            </span>
+                          ) : (
+                            // Voucher cũ migration chưa backfill: chạy theo hành
+                            // vi legacy (chỉ có trần giảm, không ràng buộc).
+                            <span className='text-[11px] text-muted-foreground'>
+                              Không thuộc chiến dịch
+                            </span>
+                          )}
+                        </td>
                         <td className='px-5 py-3.5 font-semibold text-foreground'>
-                          {formatCurrency(v.discountCapVnd)}
+                          {voucherBenefitLabel(v)}
                         </td>
                         <td className='px-5 py-3.5'>
                           <span

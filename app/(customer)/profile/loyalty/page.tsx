@@ -1,9 +1,9 @@
 'use client';
 
-import { getMyLoyalty, getTierConfigs } from '@/lib/customer-api';
-import { useAuthStore } from '@/store/useAuthStore';
-import { LoyaltyAccount, TierConfig } from '@/types/loyalty';
+import { getTierConfigs } from '@/lib/customer-api';
+import { TierConfig } from '@/types/loyalty';
 import { useQuery } from '@tanstack/react-query';
+import { useMyLoyalty } from '@/hooks/orders/useOrders';
 import {
   Crown,
   Sparkles,
@@ -16,81 +16,31 @@ import {
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-// Mapping color styles for each tier card
-const tierStyles: Record<
-  string,
-  {
-    gradient: string;
-    text: string;
-    border: string;
-    glow: string;
-    badgeBg: string;
-    chipBg: string;
-  }
-> = {
-  member: {
-    gradient: 'from-zinc-700 via-zinc-800 to-zinc-950',
-    text: 'text-zinc-300',
-    border: 'border-zinc-600/30',
-    glow: 'shadow-zinc-950/20',
-    badgeBg: 'bg-zinc-800/80 text-zinc-300 border-zinc-600',
-    chipBg: 'bg-zinc-600/20',
-  },
-  silver: {
-    gradient: 'from-slate-400 via-slate-600 to-slate-800',
-    text: 'text-slate-100',
-    border: 'border-slate-500/30',
-    glow: '',
-    badgeBg: 'bg-slate-700/80 text-slate-200 border-slate-500',
-    chipBg: 'bg-muted/400/20',
-  },
-  gold: {
-    gradient: 'from-amber-400 via-yellow-600 to-amber-900',
-    text: 'text-amber-100',
-    border: 'border-amber-500/30',
-    glow: '',
-    badgeBg: 'bg-amber-900/60 text-amber-200 border-amber-500',
-    chipBg: 'bg-warning/20',
-  },
-  platinum: {
-    gradient: 'from-cyan-500 via-blue-700 to-slate-900',
-    text: 'text-cyan-100',
-    border: 'border-cyan-500/30',
-    glow: 'shadow-cyan-600/30',
-    badgeBg: 'bg-cyan-950/80 text-cyan-200 border-cyan-500',
-    chipBg: 'bg-cyan-500/20',
-  },
-};
+import { formatCurrency } from '@/lib/format';
+// Thẻ hạng + bảng màu dùng chung; tên hạng lấy từ nguồn duy nhất ở constants.
+import LoyaltyCard, { tierStyles } from '@/components/profile/LoyaltyCard';
+import { getTierLabel } from '@/constants/tiers';
 
 export default function LoyaltyPage() {
-  const authUser = useAuthStore((s) => s.authUser);
-
   // ─── React Query ─────────────────────────────────────────
   const {
-    data: loyaltyData,
+    data: loyalty = null,
     isLoading: isLoyaltyLoading,
     error: loyaltyError,
-  } = useQuery({
-    queryKey: ['my-loyalty'],
-    queryFn: getMyLoyalty,
-  });
+  } = useMyLoyalty();
 
   const { data: tierConfigsData, isLoading: isTiersLoading } = useQuery({
     queryKey: ['tier-configs'],
     queryFn: getTierConfigs,
   });
 
-  const loyalty: LoyaltyAccount | null =
-    loyaltyData?.data?.data ?? loyaltyData?.data ?? null;
   const tiers: TierConfig[] =
     tierConfigsData?.data?.data ?? tierConfigsData?.data ?? [];
 
   const isLoading = isLoyaltyLoading || isTiersLoading;
 
   // ─── Logic helper ────────────────────────────────────────
-  const currentTierName = (loyalty?.tierName ?? 'Member').toLowerCase();
-  const currentStyle = tierStyles[currentTierName] || tierStyles.member;
+  const currentTierName = (loyalty?.tierName ?? 'None').toLowerCase();
 
   // Find user's current tier config and the next tier config
   const currentTierConfig = tiers.find(
@@ -111,20 +61,24 @@ export default function LoyaltyPage() {
       ? sortedTiers[currentTierIndex + 1]
       : null;
 
-  // ─── Tiến độ voucher rửa miễn phí (mốc 10 lần rửa) ──────────
-  const WASHES_PER_FREE_VOUCHER = 10; // khớp WASHES_PER_FREE_VOUCHER ở BE
+  // ─── Tiến độ voucher thưởng ─────────────────────────────────
+  // Mốc lượt rửa và giá trị voucher kế tiếp do BE tính theo hạng
+  // (`washesRequiredForNextVoucher`, `estimatedNextVoucherVnd`) - không tự suy
+  // lại ở client. Số 10 chỉ là dự phòng khi dữ liệu chưa về.
+  const washesPerVoucher = loyalty?.washesRequiredForNextVoucher ?? 10;
   const towardVoucher = loyalty?.successfulWashesTowardVoucher ?? 0;
-  const washesToVoucher = Math.max(WASHES_PER_FREE_VOUCHER - towardVoucher, 0);
-  const voucherPct = Math.min(
-    (towardVoucher / WASHES_PER_FREE_VOUCHER) * 100,
-    100,
-  );
+  const washesToVoucher =
+    loyalty?.washesRemainingForNextVoucher ??
+    Math.max(washesPerVoucher - towardVoucher, 0);
+  const voucherPct = Math.min((towardVoucher / washesPerVoucher) * 100, 100);
 
   // ─── Tiến độ thăng hạng (theo điểm tích lũy) ────────────────
   const pointsBalance = loyalty?.pointsBalance ?? 0;
-  const pointsToNextTier = nextTierConfig
-    ? Math.max(nextTierConfig.minLoyaltyPoints - pointsBalance, 0)
-    : 0;
+  const pointsToNextTier =
+    loyalty?.pointsToNextTier ??
+    (nextTierConfig
+      ? Math.max(nextTierConfig.minLoyaltyPoints - pointsBalance, 0)
+      : 0);
   const tierPct =
     nextTierConfig && nextTierConfig.minLoyaltyPoints > 0
       ? Math.min((pointsBalance / nextTierConfig.minLoyaltyPoints) * 100, 100)
@@ -162,9 +116,9 @@ export default function LoyaltyPage() {
           <Award className='w-7 h-7 text-primary' /> Khách Hàng Thân Thiết
         </h1>
         <p className='text-sm text-muted-foreground'>
-          Tích điểm qua mỗi lần rửa để nâng hạng, và cứ{' '}
-          {WASHES_PER_FREE_VOUCHER} lượt rửa hợp lệ nhận ngay voucher thưởng
-          bằng ~5% chi tiêu của các lượt đó.
+          Tích điểm qua mỗi lần rửa để nâng hạng, và cứ {washesPerVoucher} lượt
+          rửa hợp lệ nhận ngay voucher thưởng — giá trị thay đổi theo hạng và
+          mức chi tiêu của bạn.
         </p>
       </div>
 
@@ -172,73 +126,8 @@ export default function LoyaltyPage() {
         {/* Left Column: E-Card & Progress */}
         <div className='lg:col-span-7 space-y-6'>
           {/* E-Membership Card */}
-          <div
-            className={`relative rounded-xl p-8 bg-gradient-to-br ${currentStyle.gradient} text-white shadow-xl ${currentStyle.glow} overflow-hidden border ${currentStyle.border} aspect-[1.586/1] flex flex-col justify-between group transition-all duration-300 hover:scale-[1.01]`}
-          >
-            {/* Background elements */}
-            <div className='absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-125 transition-all duration-500' />
-            <div className='absolute left-1/3 bottom-0 w-48 h-24 bg-white/5 rounded-full blur-xl' />
-
-            {/* Card Header */}
-            <div className='flex justify-between items-start z-10'>
-              <div className='space-y-1'>
-                <p className='text-[10px] font-semibold uppercase tracking-widest text-white/60'>
-                  E-Membership Card
-                </p>
-                <h3 className='font-heading font-semibold tracking-wider text-lg'>
-                  WASH AUTO
-                </h3>
-              </div>
-              <div
-                className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide border flex items-center gap-1.5 backdrop-blur-md ${currentStyle.badgeBg}`}
-              >
-                <Crown className='w-3.5 h-3.5' />{' '}
-                {loyalty?.tierName || 'Member'}
-              </div>
-            </div>
-
-            {/* Card Body with EMV Chip Design */}
-            <div className='flex items-center gap-4 z-10 my-4'>
-              <div
-                className={`w-11 h-9 rounded-md ${currentStyle.chipBg} border border-white/20 relative overflow-hidden flex flex-col justify-around p-1`}
-              >
-                <div className='h-[1px] bg-white/20 w-full' />
-                <div className='h-[1px] bg-white/20 w-full' />
-                <div className='h-[1px] bg-white/20 w-full' />
-              </div>
-              <div>
-                <p className='text-xs font-medium text-white/70'>Tên chủ thẻ</p>
-                <p className='font-bold uppercase tracking-wider text-sm sm:text-base'>
-                  {authUser?.name || 'KHÁCH HÀNG'}
-                </p>
-              </div>
-            </div>
-
-            {/* Card Footer */}
-            <div className='grid grid-cols-2 gap-4 border-t border-white/15 pt-4 z-10'>
-              <div>
-                <p className='text-[9px] font-semibold uppercase tracking-widest text-white/50 flex items-center gap-1'>
-                  <Coins className='w-3 h-3' /> Điểm Tích Lũy
-                </p>
-                <p className='text-lg font-semibold tracking-wide'>
-                  {(loyalty?.pointsBalance ?? 0).toLocaleString()}{' '}
-                  <span className='text-xs font-semibold text-white/70'>
-                    PTS
-                  </span>
-                </p>
-              </div>
-              <div className='text-right'>
-                <p className='text-[9px] font-semibold uppercase tracking-widest text-white/50 flex items-center gap-1 justify-end'>
-                  <Sparkles className='w-3 h-3' /> Tổng Lượt Rửa
-                </p>
-                <p className='text-lg font-semibold tracking-wide'>
-                  {(loyalty?.totalSuccessfulWashes ?? 0).toLocaleString()}{' '}
-                  <span className='text-xs font-semibold text-white/70'>
-                    lần
-                  </span>
-                </p>
-              </div>
-            </div>
+          <div className='max-w-xl'>
+            <LoyaltyCard loyalty={loyalty} />
           </div>
 
           {/* Voucher & Tier Progress Card */}
@@ -253,12 +142,12 @@ export default function LoyaltyPage() {
                       Voucher Thưởng
                     </h3>
                     <p className='text-xs text-muted-foreground'>
-                      Cứ {WASHES_PER_FREE_VOUCHER} lượt rửa hợp lệ, bạn nhận
-                      voucher thưởng bằng ~5% chi tiêu của các lượt đó.
+                      Cứ {washesPerVoucher} lượt rửa hợp lệ, bạn nhận một voucher
+                      thưởng tính theo chi tiêu của các lượt đó.
                     </p>
                   </div>
                   <span className='font-semibold text-primary text-base shrink-0'>
-                    {towardVoucher}/{WASHES_PER_FREE_VOUCHER}
+                    {towardVoucher}/{washesPerVoucher}
                   </span>
                 </div>
                 <div className='h-3 bg-muted rounded-full overflow-hidden relative border border-border/20'>
@@ -269,12 +158,17 @@ export default function LoyaltyPage() {
                 </div>
                 <div className='bg-[#FFFBF2] border border-[#F9E1B2] rounded-xl p-4 flex items-start gap-3 text-[#856404] text-xs sm:text-sm shadow-xs'>
                   <Sparkles className='w-5 h-5 text-orange-400 shrink-0 mt-0.5' />
+                  {/* Giá trị voucher kế tiếp do BE tính sẵn - không suy lại ở client. */}
                   <p>
                     Còn{' '}
                     <strong className='text-[#856404]'>
                       {washesToVoucher}
                     </strong>{' '}
-                    lượt rửa hợp lệ nữa để nhận <strong>voucher thưởng</strong>!
+                    lượt rửa hợp lệ nữa để nhận <strong>voucher thưởng</strong>
+                    {loyalty?.estimatedNextVoucherVnd
+                      ? ` trị giá khoảng ${formatCurrency(loyalty.estimatedNextVoucherVnd)}`
+                      : ''}
+                    !
                   </p>
                 </div>
               </div>
@@ -313,7 +207,7 @@ export default function LoyaltyPage() {
                       </strong>{' '}
                       điểm nữa để lên hạng{' '}
                       <strong className='text-primary capitalize'>
-                        {nextTierConfig.tierName}
+                        {getTierLabel(nextTierConfig.tierName)}
                       </strong>{' '}
                       (cần {nextTierConfig.minLoyaltyPoints.toLocaleString()}{' '}
                       điểm).
@@ -361,7 +255,7 @@ export default function LoyaltyPage() {
                       </div>
                     </div>
 
-                    <div className='flex items-center gap-3 p-3 rounded-xl bg-info/10 border border-info/30/50'>
+                    <div className='flex items-center gap-3 p-3 rounded-xl bg-info/10 border border-info/30'>
                       <div className='p-2 rounded-xl bg-card shadow-xs text-blue-600'>
                         <Calendar className='w-5 h-5' />
                       </div>
@@ -376,7 +270,7 @@ export default function LoyaltyPage() {
                       </div>
                     </div>
 
-                    <div className='flex items-center gap-3 p-3 rounded-xl bg-warning/10 border border-warning/30/50'>
+                    <div className='flex items-center gap-3 p-3 rounded-xl bg-warning/10 border border-warning/30'>
                       <div className='p-2 rounded-xl bg-card shadow-xs text-warning'>
                         <Coins className='w-5 h-5' />
                       </div>
@@ -428,7 +322,7 @@ export default function LoyaltyPage() {
           {sortedTiers.map((t) => {
             const isMyTier = t.tierName.toLowerCase() === currentTierName;
             const style =
-              tierStyles[t.tierName.toLowerCase()] || tierStyles.member;
+              tierStyles[t.tierName.toLowerCase()] || tierStyles.none;
 
             return (
               <div
@@ -452,7 +346,7 @@ export default function LoyaltyPage() {
                   <div className='absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full blur-xl -mr-6 -mt-6' />
                   <Crown className='w-6 h-6 mb-2 relative z-10' />
                   <h3 className='font-heading font-semibold text-lg capitalize tracking-wide relative z-10'>
-                    {t.tierName}
+                    {getTierLabel(t.tierName)}
                   </h3>
                   <p className='text-[10px] text-white/70 mt-1 relative z-10 flex items-center gap-1 font-medium'>
                     <TrendingUp className='w-3 h-3' /> Cần{' '}

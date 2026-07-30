@@ -1,5 +1,6 @@
 import { axiosInstance } from '@/lib/axios';
-import { User } from '@/types/auth';
+import { ENDPOINTS } from '@/services/endpoints';
+import { AuthResponse, User } from '@/types/auth';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -10,6 +11,13 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setAccessToken: (token: string | null) => void;
   setRefreshToken: (token: string | null) => void;
+  /** Lưu cả cặp token sau login/register/google trong một lần set. */
+  setSession: (tokens: {
+    accessToken: string;
+    refreshToken?: string | null;
+    user?: User | null;
+  }) => void;
+  clearSession: () => void;
   refreshAccessToken: () => Promise<string | null>;
   getUser: () => Promise<User | null>;
   _hasHydrated: boolean;
@@ -28,14 +36,26 @@ export const useAuthStore = create<AuthState>()(
       setAccessToken: (token) => set({ accessToken: token }),
       setRefreshToken: (token) => set({ refreshToken: token }),
 
+      setSession: ({ accessToken, refreshToken, user }) =>
+        set({
+          accessToken,
+          ...(refreshToken ? { refreshToken } : {}),
+          ...(user ? { authUser: user } : {}),
+        }),
+
+      clearSession: () =>
+        set({ authUser: null, accessToken: null, refreshToken: null }),
+
       refreshAccessToken: async () => {
         const { refreshToken } = get();
         if (!refreshToken) return null;
 
         try {
-          const res = await axiosInstance.post('/auth/refresh', {
-            refreshToken,
-          });
+          // POST /auth/refresh → AuthResponse (accessToken + refreshToken + user).
+          const res = await axiosInstance.post<AuthResponse>(
+            ENDPOINTS.auth.refresh,
+            { refreshToken },
+          );
           const { accessToken, refreshToken: newRefreshToken, user } = res.data;
           set({
             accessToken,
@@ -49,13 +69,17 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      /**
+       * Hồ sơ đầy đủ lấy từ GET /me/profile (`UserResponse`).
+       * KHÔNG dùng GET /auth/me: endpoint đó chỉ trả payload của access token
+       * (`{ sub, email, role }`), không có name/phone/avatarUrl/dateOfBirth.
+       */
       getUser: async (): Promise<User | null> => {
         const token = get().accessToken;
         if (!token) return null;
         try {
-          const res = await axiosInstance.get('/auth/me');
-          const resData = res.data?.data || res.data || res;
-          const fetchedUser = (resData?.user || resData) as User;
+          const res = await axiosInstance.get<User>(ENDPOINTS.profile.me);
+          const fetchedUser = res.data;
 
           if (fetchedUser && typeof fetchedUser === 'object') {
             const mergedUser = { ...get().authUser, ...fetchedUser };

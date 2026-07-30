@@ -2,23 +2,37 @@
 
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
 import {
-  adminGetUsers, adminUpdateUserRole,
+  adminGetUsers, adminUpdateUser, adminUpdateUserRole,
   adminUpdateUserStatus, adminResetUserPassword,
 } from '@/lib/admin-api';
+import { getErrorMessage } from '@/lib/getErrorMessage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Search, RefreshCw, Ban, KeyRound, ChevronDown } from 'lucide-react';
+import { Search, RefreshCw, Ban, KeyRound, ChevronDown, Pencil } from 'lucide-react';
+import { toast } from 'sonner';
 
+/** Khớp `UserResponse` (Swagger). Trạng thái là `isActive`, KHÔNG phải `status`. */
 interface UserData {
   _id?: string;
   id?: string;
   role?: string;
-  status?: string;
+  isActive?: boolean;
   fullName?: string;
   name?: string;
   email?: string;
+  phone?: string;
+  avatarUrl?: string;
+  dateOfBirth?: string;
   createdAt?: string;
   [key: string]: unknown;
+}
+
+/** Trường sửa được qua PATCH /admin/users/:id (BE UpdateUserDto). */
+interface EditUserForm {
+  id: string;
+  name: string;
+  phone: string;
+  dateOfBirth: string;
 }
 
 const roleConfig: Record<string, { label: string; cls: string }> = {
@@ -29,10 +43,9 @@ const roleConfig: Record<string, { label: string; cls: string }> = {
   customer: { label: 'Khách hàng', cls: 'bg-muted text-muted-foreground' },
 };
 
-const statusConfig: Record<string, { label: string; cls: string }> = {
+const statusConfig: Record<'active' | 'inactive', { label: string; cls: string }> = {
   active:   { label: 'Hoạt động', cls: 'bg-success/10 text-success' },
   inactive: { label: 'Vô hiệu',   cls: 'bg-destructive/10 text-destructive' },
-  banned:   { label: 'Banned',    cls: 'bg-gray-100 text-gray-600' },
 };
 
 export default function AdminUsersPage() {
@@ -42,6 +55,7 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [resetId, setResetId] = useState<string | null>(null);
   const [newPwd, setNewPwd] = useState('');
+  const [editForm, setEditForm] = useState<EditUserForm | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['admin-users', roleFilter],
@@ -57,14 +71,33 @@ export default function AdminUsersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
 
+  // PATCH /admin/users/:id/status nhận `{ isActive: boolean }`.
   const changeStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => adminUpdateUserStatus(id, status),
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      adminUpdateUserStatus(id, isActive),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+    onError: (err) => toast.error(getErrorMessage(err)),
   });
 
   const resetPwd = useMutation({
     mutationFn: ({ id, password }: { id: string; password: string }) => adminResetUserPassword(id, password),
-    onSuccess: () => { setResetId(null); setNewPwd(''); },
+    onSuccess: () => { setResetId(null); setNewPwd(''); toast.success('Đã đặt lại mật khẩu'); },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  });
+
+  const updateUser = useMutation({
+    mutationFn: ({ id, ...data }: EditUserForm) =>
+      adminUpdateUser(id, {
+        name: data.name.trim(),
+        phone: data.phone.trim() || undefined,
+        dateOfBirth: data.dateOfBirth || undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-users'] });
+      setEditForm(null);
+      toast.success('Đã cập nhật hồ sơ người dùng');
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
   });
 
   const users: UserData[] = data?.data?.data ?? data?.data ?? [];
@@ -137,7 +170,9 @@ export default function AdminUsersPage() {
                   ) : (
                     paginatedUsers.map((u: UserData) => {
                       const role = roleConfig[u.role ?? ''] ?? { label: u.role, cls: 'bg-muted text-muted-foreground' };
-                      const status = statusConfig[u.status ?? 'active'] ?? statusConfig.active;
+                      // BE trả isActive (boolean), không phải chuỗi status.
+                      const isActive = u.isActive !== false;
+                      const status = isActive ? statusConfig.active : statusConfig.inactive;
                       const id = u._id ?? u.id ?? '';
                       return (
                         <tr key={id} className='hover:bg-muted/20 transition-colors'>
@@ -171,10 +206,22 @@ export default function AdminUsersPage() {
                                 <option value='manager'>Quản lý</option>
                                 <option value='admin'>Admin</option>
                               </select>
+                              {/* Sửa hồ sơ */}
+                              <button
+                                onClick={() => setEditForm({
+                                  id,
+                                  name: u.fullName ?? u.name ?? '',
+                                  phone: u.phone ?? '',
+                                  dateOfBirth: u.dateOfBirth ? String(u.dateOfBirth).slice(0, 10) : '',
+                                })}
+                                title='Sửa hồ sơ'
+                                className='w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:border-primary/30 hover:text-primary transition-all'>
+                                <Pencil className='w-3.5 h-3.5' />
+                              </button>
                               {/* Toggle status */}
                               <button
-                                onClick={() => changeStatus.mutate({ id, status: u.status === 'active' ? 'inactive' : 'active' })}
-                                title={u.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}
+                                onClick={() => changeStatus.mutate({ id, isActive: !isActive })}
+                                title={isActive ? 'Vô hiệu hoá' : 'Kích hoạt'}
                                 className='w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:border-destructive/40 hover:text-destructive transition-all'>
                                 <Ban className='w-3.5 h-3.5' />
                               </button>
@@ -207,6 +254,43 @@ export default function AdminUsersPage() {
           </div>
         </div>
       </main>
+
+      {/* Edit Profile Modal */}
+      {editForm && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4' onClick={() => setEditForm(null)}>
+          <div className='bg-card rounded-xl p-8 w-full max-w-sm shadow-2xl' onClick={(e) => e.stopPropagation()}>
+            <div className='flex items-center gap-3 mb-6'>
+              <div className='w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center'>
+                <Pencil className='w-5 h-5 text-primary' />
+              </div>
+              <div>
+                <h3 className='font-heading font-semibold text-foreground'>Sửa hồ sơ người dùng</h3>
+                <p className='text-xs text-muted-foreground'>Tên, số điện thoại và ngày sinh</p>
+              </div>
+            </div>
+            <div className='space-y-3 mb-4'>
+              <input type='text' placeholder='Họ và tên'
+                value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className='w-full border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50' />
+              <input type='text' placeholder='Số điện thoại' inputMode='tel'
+                value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                className='w-full border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50' />
+              <input type='date'
+                value={editForm.dateOfBirth} onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })}
+                className='w-full border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50' />
+            </div>
+            <div className='flex gap-3'>
+              <button onClick={() => setEditForm(null)}
+                className='flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-all'>Huỷ</button>
+              <button onClick={() => updateUser.mutate(editForm)}
+                disabled={!editForm.name.trim() || updateUser.isPending}
+                className='flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50 hover:bg-primary/90 transition-all'>
+                {updateUser.isPending ? 'Đang lưu...' : 'Lưu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reset Password Modal */}
       {resetId && (

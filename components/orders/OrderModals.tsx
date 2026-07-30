@@ -24,6 +24,7 @@ import {
 } from '@/hooks/orders/useOrders';
 import { submitFeedback } from '@/lib/customer-api';
 import { cn } from '@/lib/utils';
+import { toLocalDateKey } from '@/lib/format';
 import { Order, AvailableSlot } from '@/types/order';
 
 /** Xe của khách - shape tối thiểu các modal cần. */
@@ -52,8 +53,8 @@ export function RescheduleOrderModal({
   onDone?: () => void;
 }) {
   const rescheduleMutation = useRescheduleOrder();
-  const [rescheduleDate, setRescheduleDate] = useState(
-    () => new Date().toISOString().split('T')[0],
+  const [rescheduleDate, setRescheduleDate] = useState(() =>
+    toLocalDateKey(new Date()),
   );
   const [rescheduleSlot, setRescheduleSlot] = useState('');
 
@@ -64,7 +65,7 @@ export function RescheduleOrderModal({
     for (let i = 0; i < 7; i++) {
       const current = new Date(today);
       current.setDate(today.getDate() + i);
-      const val = current.toISOString().split('T')[0];
+      const val = toLocalDateKey(current);
       const lbl =
         current.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) +
         ' (' +
@@ -87,8 +88,10 @@ export function RescheduleOrderModal({
     return {
       serviceTypeId: order.serviceTypeId,
       vehicleTypeId: vehicle?.vehicleTypeId || '',
-      from: `${rescheduleDate}T00:00:00.000Z`,
-      to: `${rescheduleDate}T23:59:59.000Z`,
+      // Biên ngày lấy theo giờ địa phương rồi đổi sang UTC (giống trang đặt lịch);
+      // ghép thẳng hậu tố 'Z' sẽ khiến khoảng truy vấn lệch đúng bằng offset múi giờ.
+      from: new Date(`${rescheduleDate}T00:00:00`).toISOString(),
+      to: new Date(`${rescheduleDate}T23:59:59.999`).toISOString(),
       enabled: !!rescheduleDate && !!vehicle?.vehicleTypeId,
     };
   }, [order, rescheduleDate, vehicles]);

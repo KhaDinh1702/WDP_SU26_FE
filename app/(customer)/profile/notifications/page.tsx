@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, Check } from 'lucide-react';
+import { Bell, Check, RefreshCcw } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Spinner } from '@/components/ui/spinner';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -16,11 +16,13 @@ import {
   timeAgo,
 } from '@/components/notifications/notification-meta';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/getErrorMessage';
 
 export default function NotificationsPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useNotifications(page, 20);
+  const { data, isLoading, isError, refetch } = useNotifications(page, 20);
   const items = data?.data ?? [];
   const meta = data?.meta;
   const unread = data?.unread ?? 0;
@@ -33,15 +35,23 @@ export default function NotificationsPage() {
   const readOne = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
     onSuccess: invalidate,
+    onError: (error) =>
+      toast.error('Không thể đánh dấu thông báo.', {
+        description: getErrorMessage(error),
+      }),
   });
   const readAll = useMutation({
     mutationFn: () => markAllNotificationsRead(),
     onSuccess: invalidate,
+    onError: (error) =>
+      toast.error('Không thể đánh dấu tất cả thông báo.', {
+        description: getErrorMessage(error),
+      }),
   });
 
   return (
     <div className='space-y-6'>
-      <div className='flex items-end justify-between gap-4'>
+      <div className='flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between'>
         <div>
           <h1 className='font-heading text-2xl font-semibold text-foreground flex items-center gap-2'>
             <Bell className='w-7 h-7 text-primary' /> Thông báo
@@ -55,7 +65,7 @@ export default function NotificationsPage() {
             type='button'
             onClick={() => readAll.mutate()}
             disabled={readAll.isPending}
-            className='inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50'
+            className='inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50 sm:w-auto'
           >
             <Check className='h-4 w-4' /> Đánh dấu tất cả đã đọc
           </button>
@@ -67,6 +77,23 @@ export default function NotificationsPage() {
           <Spinner className='size-8 text-primary' />
           <p className='text-sm text-muted-foreground'>Đang tải thông báo...</p>
         </div>
+      ) : isError ? (
+        <div className='flex min-h-64 flex-col items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/5 p-6 text-center'>
+          <Bell className='size-8 text-destructive' />
+          <h2 className='mt-3 font-heading text-lg font-bold text-foreground'>
+            Chưa thể tải thông báo
+          </h2>
+          <p className='mt-1 max-w-md text-sm text-muted-foreground'>
+            Kết nối đang gặp sự cố. Bạn có thể thử tải lại dữ liệu.
+          </p>
+          <button
+            type='button'
+            onClick={() => refetch()}
+            className='mt-4 inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold hover:bg-muted'
+          >
+            <RefreshCcw className='size-4' /> Thử lại
+          </button>
+        </div>
       ) : items.length === 0 ? (
         <EmptyState
           icon={Bell}
@@ -75,7 +102,7 @@ export default function NotificationsPage() {
         />
       ) : (
         <>
-          <ul className='divide-y divide-border rounded-xl border border-border bg-card overflow-hidden'>
+          <ul className='divide-y divide-border overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-38px_rgba(30,58,138,0.55)]'>
             {items.map((n) => {
               const m = NOTI_META[n.type] ?? fallbackMeta;
               const Icon = m.icon;
@@ -86,8 +113,9 @@ export default function NotificationsPage() {
                     onClick={() => {
                       if (!n.isRead) readOne.mutate(n.id);
                     }}
+                    disabled={readOne.isPending && readOne.variables === n.id}
                     className={cn(
-                      'flex w-full items-start gap-3.5 px-5 py-4 text-left transition-colors hover:bg-muted/50',
+                      'flex w-full items-start gap-3.5 px-4 py-4 text-left transition-colors hover:bg-muted/50 disabled:cursor-wait disabled:opacity-70 sm:px-5',
                       !n.isRead && 'bg-accent/40',
                     )}
                   >

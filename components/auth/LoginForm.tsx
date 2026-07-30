@@ -17,16 +17,19 @@ export function LoginForm({
   className,
   onSubmit,
   loading,
+  defaultEmail = '',
   ...props
 }: Omit<React.ComponentProps<'div'>, 'onSubmit'> & {
   onSubmit: (data: LoginFormData) => void;
   loading: boolean;
+  /** Điền sẵn email, ví dụ khi quay về từ màn hình xác minh email. */
+  defaultEmail?: string;
 }) {
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     mode: 'onTouched',
     defaultValues: {
-      email: '',
+      email: defaultEmail,
       password: '',
     },
   });
@@ -74,9 +77,13 @@ export function LoginForm({
                 />
 
                 <div className='flex justify-end'>
-                  <span className='cursor-pointer text-sm font-medium text-primary transition-colors hover:text-primary/80 hover:underline'>
+                  <button
+                    type='button'
+                    onClick={() => router.push('/forgot-password')}
+                    className='cursor-pointer text-sm font-medium text-primary transition-colors hover:text-primary/80 hover:underline'
+                  >
                     Quên mật khẩu?
-                  </span>
+                  </button>
                 </div>
 
                 <Button

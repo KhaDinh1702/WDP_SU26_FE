@@ -11,7 +11,7 @@ export const useClaimVoucher = () => {
   return useMutation({
     mutationFn: async (code: string): Promise<Voucher> => {
       const res = await claimVoucher(code);
-      return (res.data?.data ?? res.data) as Voucher;
+      return res.data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['my-vouchers'] });

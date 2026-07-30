@@ -7,6 +7,7 @@ import { Check, Crown, Star, CalendarDays, Sparkles, Gift } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTierConfigs } from '@/lib/customer-api';
 import { formatNumber } from '@/lib/format';
+import { getTierLabel } from '@/constants/tiers';
 
 interface TierConfig {
   id: string;
@@ -18,34 +19,32 @@ interface TierConfig {
   isActive: boolean;
 }
 
-const TIER_META: Record<
+// Chỉ còn phần tạo hình. Tên hạng lấy từ constants/tiers.ts — trang này từng
+// tự gọi hạng None là "Basic" trong khi phần còn lại của app gọi "Thành viên".
+const TIER_VISUALS: Record<
   string,
-  { label: string; icon: typeof Star; accent: string; highlight?: boolean }
+  { icon: typeof Star; accent: string; highlight?: boolean }
 > = {
   None: {
-    label: 'Basic',
     icon: Star,
     accent: 'bg-muted text-muted-foreground',
   },
   Bronze: {
-    label: 'Bronze',
     icon: Star,
     accent: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   },
   Silver: {
-    label: 'Silver',
     icon: Star,
     accent: 'bg-slate-400/15 text-slate-500 dark:text-slate-300',
   },
   Gold: {
-    label: 'Gold',
     icon: Crown,
     accent: 'bg-primary/10 text-primary',
     highlight: true,
   },
 };
 
-const DEFAULT_META = {
+const DEFAULT_VISUALS = {
   icon: Star,
   accent: 'bg-muted text-muted-foreground',
   highlight: false,
@@ -110,9 +109,9 @@ export function LoyaltyTiersSection() {
         ) : (
           <div className='grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6'>
             {tiers.map((tier) => {
-              const meta = TIER_META[tier.tierName] ?? {
-                ...DEFAULT_META,
-                label: tier.tierName,
+              const meta = {
+                ...(TIER_VISUALS[tier.tierName] ?? DEFAULT_VISUALS),
+                label: getTierLabel(tier.tierName),
               };
               const Icon = meta.icon;
               const highlight = meta.highlight;

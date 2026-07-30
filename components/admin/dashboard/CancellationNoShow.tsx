@@ -3,7 +3,6 @@
 import {
   AlertTriangle,
   CalendarX,
-  Info,
   TrendingDown,
   UserX,
 } from 'lucide-react';
@@ -18,13 +17,82 @@ import {
   BarList,
   DashboardSection,
   EmptyBlock,
-  HourStrip,
   KpiCard,
   Panel,
   RankBadge,
   type RankColumn,
   RankingTable,
 } from './parts';
+
+const CANCELLATION_REASON_LABELS: Record<string, string> = {
+  'cancelled by customer': 'Khách hàng hủy lịch',
+  'canceled by customer': 'Khách hàng hủy lịch',
+  'customer cancelled': 'Khách hàng hủy lịch',
+  'customer canceled': 'Khách hàng hủy lịch',
+  'user cancelled': 'Khách hàng hủy lịch',
+  'user canceled': 'Khách hàng hủy lịch',
+  'customer request': 'Khách hàng yêu cầu hủy',
+  'cancelled by staff': 'Nhân viên hủy lịch',
+  'canceled by staff': 'Nhân viên hủy lịch',
+  'staff cancelled': 'Nhân viên hủy lịch',
+  'staff canceled': 'Nhân viên hủy lịch',
+  'cancelled by admin': 'Quản trị viên hủy lịch',
+  'canceled by admin': 'Quản trị viên hủy lịch',
+  'admin cancelled': 'Quản trị viên hủy lịch',
+  'admin canceled': 'Quản trị viên hủy lịch',
+  'cancelled by store': 'Cửa hàng hủy lịch',
+  'canceled by store': 'Cửa hàng hủy lịch',
+  'store cancelled': 'Cửa hàng hủy lịch',
+  'store canceled': 'Cửa hàng hủy lịch',
+  'payment timeout': 'Quá hạn thanh toán',
+  'payment expired': 'Quá hạn thanh toán',
+  'unpaid timeout': 'Quá hạn thanh toán',
+  'system cancelled': 'Hệ thống tự động hủy',
+  'system canceled': 'Hệ thống tự động hủy',
+  'auto cancelled': 'Hệ thống tự động hủy',
+  'auto canceled': 'Hệ thống tự động hủy',
+  'cancelled by system': 'Hệ thống tự động hủy',
+  'canceled by system': 'Hệ thống tự động hủy',
+  'duplicate booking': 'Đặt lịch trùng',
+  'changed mind': 'Khách hàng đổi ý',
+  'change of plan': 'Khách hàng thay đổi kế hoạch',
+  other: 'Lý do khác',
+  unknown: 'Không xác định',
+};
+
+function localizeCancellationReason(reason: string) {
+  const raw = reason.trim();
+  if (!raw) return 'Không xác định';
+
+  const key = raw
+    .toLowerCase()
+    .replace(/[–—_/-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const translated = CANCELLATION_REASON_LABELS[key];
+  if (translated) return translated;
+
+  if (/\bauto(?:matically)? cancell?ed\b/.test(key)) {
+    return 'Hệ thống tự động hủy';
+  }
+  if (/\bpayment\b.*\b(?:timeout|expired)\b/.test(key)) {
+    return 'Quá hạn thanh toán';
+  }
+
+  return raw;
+}
+
+function groupCancellationReasons(
+  reasons: CancellationNoShowAnalytics['cancellationReasons'],
+) {
+  const grouped = new Map<string, number>();
+  for (const reason of reasons) {
+    const label = localizeCancellationReason(reason.name);
+    grouped.set(label, (grouped.get(label) ?? 0) + reason.count);
+  }
+  return Array.from(grouped, ([label, value]) => ({ label, value }));
+}
 
 /**
  * Cancellation & No-show (Customer Reliability) analytics. Shared by the admin
@@ -42,10 +110,13 @@ export function CancellationNoShowSection({
   const showPhone =
     data.topCancellingCustomers.some((r) => r.phoneMasked) ||
     data.topNoShowCustomers.some((r) => r.phoneMasked);
+  const cancellationReasonData = groupCancellationReasons(
+    data.cancellationReasons,
+  );
 
   return (
     <DashboardSection
-      title='Hủy lịch & Không đến (Cancellation & No-show)'
+      title='Hủy lịch & Không đến'
       subtitle='Khách hàng hay hủy / không đến và độ tin cậy đặt lịch.'
       icon={CalendarX}
     >
@@ -54,7 +125,6 @@ export function CancellationNoShowSection({
         <KpiCard
           label='Tổng booking bị huỷ'
           value={formatNumber(data.totalCancelled)}
-          hint='Huỷ trong kỳ (theo updated_at)'
           icon={CalendarX}
           tone='destructive'
         />
@@ -67,7 +137,6 @@ export function CancellationNoShowSection({
         <KpiCard
           label='Tổng booking không đến'
           value={formatNumber(data.totalNoShow)}
-          hint='No-show trong kỳ'
           icon={UserX}
           tone='destructive'
         />
@@ -86,16 +155,14 @@ export function CancellationNoShowSection({
         </Panel>
         <Panel
           title='Cơ cấu lý do huỷ'
-          hint='Theo trường cancel_reason của đơn'
         >
-          <DonutChart
-            data={data.cancellationReasons.map((r) => ({
-              label: r.name,
-              value: r.count,
-            }))}
-            centerCaption='lượt huỷ'
-            emptyMessage='Chưa có booking bị huỷ trong khoảng thời gian này'
-          />
+          <div className='mx-auto w-full max-w-lg'>
+            <DonutChart
+              data={cancellationReasonData}
+              centerCaption='lượt huỷ'
+              emptyMessage='Chưa có booking bị huỷ trong khoảng thời gian này'
+            />
+          </div>
         </Panel>
       </div>
 
@@ -114,21 +181,10 @@ export function CancellationNoShowSection({
             rows={data.topNoShowCustomers}
             rowKey={(r) => r.id}
             emptyMessage='Chưa có dữ liệu khách hàng không đến'
-            columns={riskColumns('Số lần no-show', showPhone)}
+            columns={riskColumns('Số lần không đến', showPhone)}
           />
         </Panel>
       </div>
-
-      {/* No-show by time slot (both variants) */}
-      <Panel
-        title='Không đến theo khung giờ'
-        hint='Theo giờ hẹn của đơn (scheduled_at)'
-      >
-        <HourStrip
-          data={data.noShowByHour}
-          emptyMessage='Chưa có booking no-show trong khoảng thời gian này'
-        />
-      </Panel>
 
       {/* Admin-only deeper breakdown */}
       {variant === 'admin' && (
@@ -158,16 +214,6 @@ export function CancellationNoShowSection({
         </div>
       )}
 
-      {data.notes.length > 0 && (
-        <ul className='space-y-1.5 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3'>
-          {data.notes.map((note, i) => (
-            <li key={i} className='flex gap-2 text-xs text-muted-foreground'>
-              <Info className='mt-0.5 size-3.5 shrink-0 text-muted-foreground/60' />
-              {note}
-            </li>
-          ))}
-        </ul>
-      )}
     </DashboardSection>
   );
 }
@@ -177,15 +223,27 @@ function riskColumns(
   showPhone: boolean,
 ): RankColumn<CustomerRiskRow>[] {
   const cols: RankColumn<CustomerRiskRow>[] = [
-    { header: '#', cell: (_r, i) => <RankBadge index={i} /> },
+    {
+      header: '#',
+      align: 'center',
+      className: 'w-12',
+      cell: (_r, i) => <RankBadge index={i} />,
+    },
     {
       header: 'Khách hàng',
-      cell: (r) => <span className='font-medium text-foreground'>{r.name}</span>,
+      className: 'min-w-36',
+      cell: (r) => (
+        <span className='block truncate font-medium text-foreground' title={r.name}>
+          {r.name}
+        </span>
+      ),
     },
   ];
   if (showPhone) {
     cols.push({
       header: 'Điện thoại',
+      align: 'center',
+      className: 'min-w-28',
       cell: (r) => (
         <span className='font-mono text-xs text-muted-foreground'>
           {r.phoneMasked ?? '—'}
@@ -196,7 +254,8 @@ function riskColumns(
   cols.push(
     {
       header: 'Tổng booking',
-      align: 'right',
+      align: 'center',
+      className: 'min-w-24',
       cell: (r) => (
         <span className='tabular-nums text-muted-foreground'>
           {formatNumber(r.totalBookings)}
@@ -205,7 +264,8 @@ function riskColumns(
     },
     {
       header: countHeader,
-      align: 'right',
+      align: 'center',
+      className: 'min-w-32',
       cell: (r) => (
         <span className='font-semibold tabular-nums'>
           {formatNumber(r.count)}
@@ -214,7 +274,8 @@ function riskColumns(
     },
     {
       header: 'Tỷ lệ',
-      align: 'right',
+      align: 'center',
+      className: 'min-w-20',
       cell: (r) => (
         <span
           className={cn(
@@ -232,7 +293,8 @@ function riskColumns(
     },
     {
       header: 'Gần nhất',
-      align: 'right',
+      align: 'center',
+      className: 'min-w-28',
       cell: (r) => (
         <span className='tabular-nums text-muted-foreground'>
           {r.lastAt ? formatDate(r.lastAt) : '—'}

@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  MoreVertical,
-  Pencil,
-  Play,
-  CheckCircle2,
-  Ban,
-} from 'lucide-react';
+import { MoreVertical, Pencil, Ban } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -23,26 +17,20 @@ type ShiftActionsMenuProps = {
   onEdit: (shift: Shift) => void;
   /** Mở modal xác nhận trước khi hủy ca (thao tác nguy hiểm). */
   onCancelRequest: (shift: Shift) => void;
-  /** Chuyển trạng thái ca qua endpoint toggle hiện có (active/completed…). */
-  onSetStatus: (shift: Shift, status: string) => void;
 };
 
 /**
- * Menu thao tác dạng dấu ba chấm — gom Sửa / chuyển trạng thái / Hủy ca,
- * hiển thị item theo trạng thái thực tế của ca.
+ * Menu thao tác dạng dấu ba chấm — chỉ còn Sửa / Hủy ca.
+ * Trạng thái ca (active/completed) do BE tự chuyển theo thời gian,
+ * không còn thao tác "bắt đầu / hoàn thành" thủ công.
  */
 export function ShiftActionsMenu({
   shift,
   onEdit,
   onCancelRequest,
-  onSetStatus,
 }: ShiftActionsMenuProps) {
   const raw = shift.status;
   const isClosed = raw === 'cancelled' || raw === 'completed';
-  const canEdit = !isClosed;
-  const canStart = raw === 'scheduled';
-  const canComplete = raw === 'active';
-  const canCancel = !isClosed;
 
   return (
     <DropdownMenu>
@@ -57,37 +45,23 @@ export function ShiftActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
-        {canEdit && (
-          <DropdownMenuItem onSelect={() => onEdit(shift)}>
-            <Pencil />
-            Sửa ca
-          </DropdownMenuItem>
-        )}
-        {canStart && (
-          <DropdownMenuItem onSelect={() => onSetStatus(shift, 'active')}>
-            <Play />
-            Bắt đầu ca
-          </DropdownMenuItem>
-        )}
-        {canComplete && (
-          <DropdownMenuItem onSelect={() => onSetStatus(shift, 'completed')}>
-            <CheckCircle2 />
-            Hoàn thành ca
-          </DropdownMenuItem>
-        )}
-        {canCancel && (canEdit || canStart || canComplete) && (
-          <DropdownMenuSeparator />
-        )}
-        {canCancel ? (
-          <DropdownMenuItem
-            variant='destructive'
-            onSelect={() => onCancelRequest(shift)}
-          >
-            <Ban />
-            Hủy ca
-          </DropdownMenuItem>
-        ) : (
+        {isClosed ? (
           <DropdownMenuItem disabled>Không có thao tác</DropdownMenuItem>
+        ) : (
+          <>
+            <DropdownMenuItem onSelect={() => onEdit(shift)}>
+              <Pencil />
+              Sửa ca
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant='destructive'
+              onSelect={() => onCancelRequest(shift)}
+            >
+              <Ban />
+              Hủy ca
+            </DropdownMenuItem>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

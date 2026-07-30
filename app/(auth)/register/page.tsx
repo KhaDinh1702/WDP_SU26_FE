@@ -3,43 +3,39 @@
 import { getErrorMessage } from '@/lib/getErrorMessage';
 import { useRegister } from '@/hooks/auth/useRegister';
 import { RegisterFormData } from '@/schemas/auth';
-import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { RegisterForm } from '@/components/auth/RegisterForm';
+import { toLocalDateKey } from '@/lib/format';
 
 export default function RegisterPage() {
   const route = useRouter();
   const register = useRegister();
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
-  const setUser = useAuthStore((s) => s.setUser);
 
   const handleSubmit = async (data: RegisterFormData): Promise<void> => {
-    const { confirmPassword, ...payload } = data;
+    const { confirmPassword, dateOfBirth, ...rest } = data;
     if (confirmPassword !== data.password) {
       toast.error('Mật khẩu nhập lại không khớp.');
       return;
     }
 
-    register.mutate(payload, {
-      onSuccess: (res) => {
-        const authData = res?.data || res;
-        const token = authData?.accessToken;
-        const user = authData?.user;
+    // `Register.dateOfBirth` là `format: date` → gửi `YYYY-MM-DD` theo giờ địa
+    // phương, không phải ISO date-time đầy đủ.
+    const payload = {
+      ...rest,
+      ...(dateOfBirth ? { dateOfBirth: toLocalDateKey(dateOfBirth) } : {}),
+    };
 
-        if (token && user) {
-          setAccessToken(token);
-          // Lưu luôn refreshToken, nếu không phiên đăng ký sẽ không refresh
-          // được và lúc đăng xuất không có token để BE thu hồi.
-          setRefreshToken(authData?.refreshToken ?? null);
-          setUser(user);
-          toast.success('Đăng ký và đăng nhập thành công!');
-          route.replace('/');
-        } else {
-          toast.success('Đăng ký thành công! Vui lòng đăng nhập.');
-          route.replace('/login');
-        }
+    register.mutate(payload, {
+      /**
+       * BE trả `UserResponse` với `isActive: false` và KHÔNG có token nào
+       * (khác mô tả trong Swagger), đồng thời chặn đăng nhập bằng 403 cho tới
+       * khi email được xác minh. Nên đăng ký xong là đi thẳng sang bước nhập
+       * OTP, không mở phiên và cũng không về thẳng trang đăng nhập.
+       */
+      onSuccess: () => {
+        toast.success('Tạo tài khoản thành công! Còn một bước xác minh email.');
+        route.replace(`/verify-email?email=${encodeURIComponent(payload.email)}`);
       },
 
       onError: (error) => {

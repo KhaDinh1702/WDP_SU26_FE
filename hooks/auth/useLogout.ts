@@ -6,9 +6,7 @@ import { useCallback } from 'react';
 
 export const useLogout = () => {
   const router = useRouter();
-  const setUser = useAuthStore((s) => s.setUser);
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
+  const clearSession = useAuthStore((s) => s.clearSession);
 
   return useCallback(
     async (redirectTo: string = '/') => {
@@ -23,12 +21,10 @@ export const useLogout = () => {
       } catch {
         // BE lỗi vẫn phải xoá phiên phía client.
       } finally {
-        setAccessToken(null);
-        setRefreshToken(null);
-        setUser(null);
+        clearSession();
         router.replace(redirectTo);
       }
     },
-    [router, setAccessToken, setRefreshToken, setUser],
+    [clearSession, router],
   );
 };

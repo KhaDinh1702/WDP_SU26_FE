@@ -1,11 +1,11 @@
 import { Skeleton } from '@/components/ui/skeleton';
 
-/** Skeleton dạng bảng — khớp 7 cột của ShiftTable. */
+/** Skeleton dạng bảng — khớp 4 cột của ShiftTable. */
 export function ShiftTableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className='overflow-hidden rounded-xl border border-border bg-card shadow-sm'>
       <div className='flex h-10 items-center gap-4 border-b border-border bg-muted/50 px-4'>
-        {['28%', '12%', '18%', '14%', '14%', '14%'].map((w, i) => (
+        {['34%', '26%', '22%', '18%'].map((w, i) => (
           <Skeleton key={i} className='h-3' style={{ width: w }} />
         ))}
       </div>
@@ -14,14 +14,11 @@ export function ShiftTableSkeleton({ rows = 6 }: { rows?: number }) {
           key={i}
           className='flex items-center gap-4 border-b border-border px-4 py-4 last:border-0'
         >
-          <div className='flex flex-1 items-center gap-3'>
-            <Skeleton className='size-9 shrink-0 rounded-full' />
-            <Skeleton className='h-4 w-32' />
+          <div className='flex flex-1 flex-col gap-1.5'>
+            <Skeleton className='h-4 w-40' />
+            <Skeleton className='h-3 w-14' />
           </div>
-          <Skeleton className='h-5 w-16 rounded-md' />
           <Skeleton className='h-4 w-28' />
-          <Skeleton className='h-4 w-20' />
-          <Skeleton className='h-4 w-24' />
           <Skeleton className='h-5 w-20 rounded-md' />
           <Skeleton className='size-8 rounded-md' />
         </div>
@@ -43,12 +40,7 @@ export function ShiftCardSkeleton({ count = 6 }: { count?: number }) {
             <Skeleton className='h-5 w-24 rounded-md' />
             <Skeleton className='size-8 rounded-md' />
           </div>
-          <div className='flex items-center gap-2.5'>
-            <Skeleton className='size-9 rounded-full' />
-            <Skeleton className='h-4 w-28' />
-          </div>
           <Skeleton className='h-4 w-40' />
-          <Skeleton className='h-4 w-32' />
           <Skeleton className='h-8 w-full rounded-lg' />
         </div>
       ))}
