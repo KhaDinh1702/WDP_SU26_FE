@@ -9,9 +9,14 @@
  * Số tiền giảm THỰC TẾ luôn do BE tính (POST /me/orders/preview). Các hàm ở đây
  * chỉ để hiển thị, không được dùng thay cho preview.
  */
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
 import type { StatusTone } from '@/constants/order-status';
-import type { Voucher, VoucherStatus } from '@/types/voucher';
+import type {
+  Voucher,
+  VoucherCampaignPublic,
+  VoucherCampaignPublicStatus,
+  VoucherStatus,
+} from '@/types/voucher';
 
 export const VOUCHER_TYPE_LABEL: Record<string, string> = {
   free_wash: 'Rửa xe miễn phí',
@@ -53,34 +58,148 @@ export function voucherTitle(v: Voucher): string {
 }
 
 /**
- * Mô tả ngắn mức ưu đãi, ví dụ "Giảm 50.000 ₫", "Giảm 20% (tối đa 100.000 ₫)",
+ * Mô tả ngắn mức ưu đãi của một CHIẾN DỊCH, ví dụ "Giảm 50.000đ",
+ * "Giảm 20% (tối đa 100.000đ)", "Miễn phí dịch vụ".
+ *
+ * `fallbackCapVnd` là trần giảm của voucher cụ thể, dùng khi chiến dịch không
+ * ghi `discountCapVnd`/`discountValue` — trang danh sách chiến dịch không có
+ * voucher nào trong tay nên bỏ trống.
+ */
+export function campaignBenefitLabel(
+  c: VoucherCampaignPublic,
+  fallbackCapVnd?: number,
+): string {
+  switch (c.benefitType) {
+    case 'percent_off': {
+      const percent = c.discountValue ?? 0;
+      const cap = c.discountCapVnd ?? fallbackCapVnd;
+      return cap
+        ? `Giảm ${percent}% (tối đa ${formatCurrency(cap)})`
+        : `Giảm ${percent}%`;
+    }
+    case 'fixed_amount': {
+      const amount = c.discountValue ?? fallbackCapVnd;
+      return amount != null
+        ? `Giảm ${formatCurrency(amount)}`
+        : 'Giảm giá theo chương trình';
+    }
+    case 'free_service':
+      return 'Miễn phí dịch vụ';
+    default:
+      return fallbackCapVnd != null
+        ? `Giảm tối đa ${formatCurrency(fallbackCapVnd)}`
+        : 'Ưu đãi theo chương trình';
+  }
+}
+
+/**
+ * Mô tả ngắn mức ưu đãi, ví dụ "Giảm 50.000đ", "Giảm 20% (tối đa 100.000đ)",
  * "Miễn phí dịch vụ". Voucher legacy (không có campaign) hiển thị theo trần giảm.
  */
 export function voucherBenefitLabel(v: Voucher): string {
   const c = v.campaign;
   if (!c) return `Giảm tối đa ${formatCurrency(v.discountCapVnd)}`;
+  return campaignBenefitLabel(c, v.discountCapVnd);
+}
 
-  switch (c.benefitType) {
-    case 'percent_off': {
-      const percent = c.discountValue ?? 0;
-      const cap = c.discountCapVnd ?? v.discountCapVnd;
-      return cap
-        ? `Giảm ${percent}% (tối đa ${formatCurrency(cap)})`
-        : `Giảm ${percent}%`;
-    }
-    case 'fixed_amount':
-      return `Giảm ${formatCurrency(c.discountValue ?? v.discountCapVnd)}`;
-    case 'free_service':
-      return 'Miễn phí dịch vụ';
-    default:
-      return `Giảm tối đa ${formatCurrency(v.discountCapVnd)}`;
-  }
+/** Điều kiện đơn tối thiểu của chiến dịch, rỗng nếu không đặt. */
+export function campaignMinOrderLabel(c: VoucherCampaignPublic): string {
+  const min = c.minOrderVnd ?? 0;
+  return min > 0 ? `Đơn tối thiểu ${formatCurrency(min)}` : '';
 }
 
 /** Điều kiện đơn tối thiểu, rỗng nếu chiến dịch không đặt. */
 export function voucherMinOrderLabel(v: Voucher): string {
-  const min = v.campaign?.minOrderVnd ?? 0;
-  return min > 0 ? `Đơn tối thiểu ${formatCurrency(min)}` : '';
+  return v.campaign ? campaignMinOrderLabel(v.campaign) : '';
+}
+
+/** Khoảng hiệu lực của chiến dịch, ví dụ "20/01/2026 – 20/02/2026". */
+export function campaignWindowLabel(c: VoucherCampaignPublic): string {
+  if (!c.validFrom && !c.validUntil) return '';
+  if (!c.validFrom) return `Đến ${formatDate(c.validUntil)}`;
+  if (!c.validUntil) return `Từ ${formatDate(c.validFrom)}`;
+  return `${formatDate(c.validFrom)} – ${formatDate(c.validUntil)}`;
+}
+
+/**
+ * Nhãn + tông màu + khả năng nhận của từng trạng thái chiến dịch.
+ * `claimable` chỉ đúng với `active`: BE chặn nhận từ chiến dịch chưa/đã hết
+ * hiệu lực (`assertCampaignClaimable`), nên UI không được mời khách nhận.
+ */
+export const CAMPAIGN_STATUS_META: Record<
+  VoucherCampaignPublicStatus,
+  { label: string; badgeClass: string; claimable: boolean }
+> = {
+  active: {
+    label: 'Đang diễn ra',
+    badgeClass: 'bg-success/10 text-success',
+    claimable: true,
+  },
+  scheduled: {
+    label: 'Sắp diễn ra',
+    badgeClass: 'bg-primary/10 text-primary',
+    claimable: false,
+  },
+  paused: {
+    label: 'Tạm dừng',
+    badgeClass: 'bg-warning/10 text-warning',
+    claimable: false,
+  },
+  ended: {
+    label: 'Đã kết thúc',
+    badgeClass: 'bg-muted text-muted-foreground',
+    claimable: false,
+  },
+};
+
+/**
+ * Trạng thái nút "Nhận" của một chiến dịch, quyết định trước khi khách bấm.
+ *
+ * BE trả sẵn `alreadyClaimed` / `soldOut` / `remaining` đúng để làm việc này -
+ * nhờ vậy không phải để khách bấm rồi mới ăn 409. Lưu ý `alreadyClaimed` VẮNG
+ * với request ẩn danh nghĩa là "không biết", nên chỉ chặn khi nó `=== true`.
+ */
+export type CampaignClaimState =
+  | 'claimable'
+  | 'claimed'
+  | 'sold_out'
+  | 'not_running';
+
+export function campaignClaimState(
+  c: VoucherCampaignPublic,
+): CampaignClaimState {
+  if (!campaignStatusMeta(c.status).claimable) return 'not_running';
+  if (c.alreadyClaimed === true) return 'claimed';
+  if (c.soldOut === true || c.remaining === 0) return 'sold_out';
+  return 'claimable';
+}
+
+/** Nhãn hiển thị trên nút/badge tương ứng với `campaignClaimState`. */
+export const CAMPAIGN_CLAIM_LABEL: Record<CampaignClaimState, string> = {
+  claimable: 'Nhận ưu đãi',
+  claimed: 'Đã nhận',
+  sold_out: 'Hết lượt',
+  not_running: 'Chưa mở nhận',
+};
+
+/** Meta trạng thái an toàn cho dữ liệu lạ - rơi về "đã kết thúc". */
+export function campaignStatusMeta(status?: string) {
+  if (status && status in CAMPAIGN_STATUS_META) {
+    return CAMPAIGN_STATUS_META[status as VoucherCampaignPublicStatus];
+  }
+  return CAMPAIGN_STATUS_META.ended;
+}
+
+/**
+ * Chiến dịch có giới hạn phạm vi không (dịch vụ / loại xe / hạng).
+ * Mảng RỖNG nghĩa là không giới hạn - đúng theo Swagger.
+ */
+export function campaignHasRestrictions(c: VoucherCampaignPublic): boolean {
+  return Boolean(
+    c.applicableServiceTypeIds?.length ||
+      c.applicableVehicleTypeIds?.length ||
+      c.allowedTierIds?.length,
+  );
 }
 
 /**
@@ -88,13 +207,7 @@ export function voucherMinOrderLabel(v: Voucher): string {
  * Mảng RỖNG nghĩa là không giới hạn - đúng theo Swagger.
  */
 export function hasVoucherRestrictions(v: Voucher): boolean {
-  const c = v.campaign;
-  if (!c) return false;
-  return Boolean(
-    c.applicableServiceTypeIds?.length ||
-      c.applicableVehicleTypeIds?.length ||
-      c.allowedTierIds?.length,
-  );
+  return v.campaign ? campaignHasRestrictions(v.campaign) : false;
 }
 
 /**

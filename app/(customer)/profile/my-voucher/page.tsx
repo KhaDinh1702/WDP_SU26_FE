@@ -2,12 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Ticket, Calendar, Info, Gift, Percent, Plus, RefreshCcw } from 'lucide-react';
-import { toast } from 'sonner';
+import { Ticket, Calendar, Info, Gift, Percent, RefreshCcw, Sparkles } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { useVouchers } from '@/hooks/vouchers/useVouchers';
-import { useClaimVoucher } from '@/hooks/vouchers/useClaimVoucher';
-import { getErrorMessage } from '@/lib/getErrorMessage';
+import { ClaimVoucherBox } from '@/components/voucher/ClaimVoucherBox';
 import { Voucher, VoucherStatus } from '@/types/voucher';
 import {
   VOUCHER_STATUS_META,
@@ -160,59 +158,6 @@ function VoucherCard({ v }: { v: Voucher }) {
   );
 }
 
-function ClaimVoucherBox() {
-  const [code, setCode] = useState('');
-  const claim = useClaimVoucher();
-
-  const submit = () => {
-    const trimmed = code.trim().toUpperCase();
-    if (!trimmed) return;
-    claim.mutate(trimmed, {
-      onSuccess: (v) => {
-        toast.success(`Đã nhận voucher ${v.code}! Xem trong mục "Chưa sử dụng".`);
-        setCode('');
-      },
-      onError: (e) => toast.error(getErrorMessage(e)),
-    });
-  };
-
-  return (
-    <div className='rounded-2xl border border-primary/10 bg-primary/5 p-4 sm:p-5'>
-      <label
-        htmlFor='claim-code'
-        className='text-xs font-medium text-muted-foreground'
-      >
-        Có mã voucher? Nhập để nhận vào tài khoản
-      </label>
-      <div className='mt-2 flex flex-col gap-2 sm:flex-row'>
-        <input
-          id='claim-code'
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submit();
-          }}
-          placeholder='VD: TET2026-4KP9XM2A7B'
-          className='min-w-0 flex-1 rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm font-mono uppercase focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-        />
-        <button
-          type='button'
-          onClick={submit}
-          disabled={claim.isPending || code.trim() === ''}
-          className='inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
-        >
-          {claim.isPending ? (
-            <Spinner className='size-4' />
-          ) : (
-            <Plus className='w-4 h-4' />
-          )}
-          Nhận
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function MyVoucherPage() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const { data: vouchers = [], isLoading, error, refetch } = useVouchers(
@@ -232,17 +177,25 @@ export default function MyVoucherPage() {
   return (
     <div className='space-y-6'>
       {/* Header */}
-      <div>
-        <h1 className='font-heading text-2xl font-semibold text-foreground flex items-center gap-2'>
-          <Ticket className='w-7 h-7 text-primary' /> Voucher của tôi
-        </h1>
-        <p className='text-sm text-muted-foreground'>
-          Sử dụng các mã giảm giá để tối ưu chi phí chăm sóc xe của bạn.
-        </p>
+      <div className='flex flex-wrap items-start justify-between gap-3'>
+        <div>
+          <h1 className='font-heading text-2xl font-semibold text-foreground flex items-center gap-2'>
+            <Ticket className='w-7 h-7 text-primary' /> Voucher của tôi
+          </h1>
+          <p className='text-sm text-muted-foreground'>
+            Sử dụng các mã giảm giá để tối ưu chi phí chăm sóc xe của bạn.
+          </p>
+        </div>
+        <Link
+          href='/profile/promotions'
+          className='inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50'
+        >
+          <Sparkles className='size-4 text-primary' /> Ưu đãi đang có
+        </Link>
       </div>
 
       {/* Nhận voucher bằng mã */}
-      <ClaimVoucherBox />
+      <ClaimVoucherBox hint='Mã do cửa hàng gửi cho bạn (tin nhắn, email hoặc tại quầy).' />
 
       {/* Tabs */}
       <Tabs
@@ -287,6 +240,14 @@ export default function MyVoucherPage() {
           icon={Ticket}
           title='Chưa có voucher nào'
           description='Bạn chưa có voucher trong mục này. Hãy rửa xe thường xuyên để nhận thêm ưu đãi nhé!'
+          action={
+            <Link
+              href='/profile/promotions'
+              className='inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50'
+            >
+              <Sparkles className='size-4' /> Xem ưu đãi đang có
+            </Link>
+          }
         />
       ) : (
         <div className='space-y-5'>

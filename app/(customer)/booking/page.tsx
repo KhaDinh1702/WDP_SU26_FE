@@ -59,7 +59,6 @@ import type {
 } from '@/types/order';
 import { useVouchers } from '@/hooks/vouchers/useVouchers';
 import { Voucher } from '@/types/voucher';
-import { getTierLabel } from '@/constants/tiers';
 import {
   isVoucherApplicableTo,
   isVoucherUsable,
@@ -1756,17 +1755,6 @@ function BookingFlow() {
                               − {formatCurrency(discount)}
                             </span>
                           </div>
-                        )}
-
-                        {(preview?.isGoldenHour
-                          ? preview.tierDiscountPercent > 0
-                          : localGoldenDiscount > 0) && (
-                          <p className='text-[11px] text-muted-foreground -mt-1'>
-                            Khung giờ vàng
-                            {preview?.tierName
-                              ? ` · hạng ${getTierLabel(preview.tierName)} giảm ${preview.tierDiscountPercent}%`
-                              : ` · giảm ${selectedSlotData?.discountPercent}%`}
-                          </p>
                         )}
 
                         <div className='flex justify-between items-baseline pt-1.5'>

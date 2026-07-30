@@ -131,7 +131,15 @@ export const ENDPOINTS = {
   },
   /** Chiến dịch voucher, bản công khai - BE `VoucherCampaignController`. */
   voucherCampaigns: {
+    list: '/voucher-campaigns',
     byId: (id: string) => `/voucher-campaigns/${id}`,
+    /**
+     * POST - nhận một voucher từ pool của chiến dịch, không cần biết mã.
+     * Bản công khai cố tình không trả `publicClaimCode`, nên đây là đường để
+     * nút "Nhận" một chạm hoạt động. Giới hạn 10 lượt/10 phút mỗi tài khoản,
+     * dùng chung hạn mức với POST /me/vouchers/claim.
+     */
+    claim: (id: string) => `/voucher-campaigns/${id}/claim`,
   },
   /** Chiến dịch voucher phía quản trị - BE `AdminVoucherCampaignController`. */
   adminVoucherCampaigns: {

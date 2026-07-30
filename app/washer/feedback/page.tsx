@@ -1,6 +1,7 @@
 'use client';
 
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
+import { StarRating } from '@/components/shared/StarRating';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDateTime, formatLicensePlate } from '@/lib/format';
@@ -11,24 +12,6 @@ import { Car, MessageSquareText, Star } from 'lucide-react';
 import { useState } from 'react';
 
 const PAGE_SIZE = 10;
-
-/** Dãy sao 1-5, tô vàng theo điểm. */
-function Stars({ rating, size = 'size-4' }: { rating: number; size?: string }) {
-  return (
-    <span className='inline-flex items-center gap-0.5'>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={star}
-          className={`${size} ${
-            star <= rating
-              ? 'fill-warning text-warning'
-              : 'fill-muted text-muted'
-          }`}
-        />
-      ))}
-    </span>
-  );
-}
 
 /**
  * Trang "Đánh giá của tôi" cho thợ: điểm trung bình, phân bố sao và danh sách
@@ -71,7 +54,7 @@ export default function WasherFeedbackPage() {
                   <span className='font-heading text-5xl font-bold text-foreground'>
                     {(summary?.averageRating ?? 0).toFixed(1)}
                   </span>
-                  <Stars rating={Math.round(summary?.averageRating ?? 0)} />
+                  <StarRating rating={Math.round(summary?.averageRating ?? 0)} />
                   <span className='text-sm text-muted-foreground'>
                     {summary?.count ?? 0} lượt đánh giá
                   </span>
@@ -128,7 +111,7 @@ export default function WasherFeedbackPage() {
                   <CardContent className='space-y-2'>
                     <div className='flex flex-wrap items-center justify-between gap-2'>
                       <div className='flex items-center gap-2'>
-                        <Stars rating={fb.rating} />
+                        <StarRating rating={fb.rating} />
                         <span className='text-sm font-medium text-foreground'>
                           {fb.customerName ?? 'Khách hàng'}
                         </span>

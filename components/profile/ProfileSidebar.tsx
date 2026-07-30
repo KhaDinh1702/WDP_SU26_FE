@@ -13,6 +13,7 @@ import {
   History,
   CalendarClock,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -49,6 +50,7 @@ const menuGroups: {
         icon: History,
       },
       { label: 'Voucher của tôi', href: '/profile/my-voucher', icon: Ticket },
+      { label: 'Ưu đãi đang có', href: '/profile/promotions', icon: Sparkles },
     ],
   },
   {

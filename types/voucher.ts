@@ -50,7 +50,11 @@ export type VoucherCampaignStatus =
   | 'paused'
   | 'ended';
 
-/** Vòng đời chiến dịch nhìn từ phía khách - `draft` không bao giờ lộ ra. */
+/**
+ * Vòng đời chiến dịch nhìn từ phía khách - `draft` không bao giờ lộ ra.
+ * Cũng đúng là tập trạng thái `GET /voucher-campaigns?status=` chấp nhận
+ * (BE `BROWSABLE_CAMPAIGN_STATUSES`); truyền `draft` bị trả 400.
+ */
 export type VoucherCampaignPublicStatus = Exclude<
   VoucherCampaignStatus,
   'draft'
@@ -85,6 +89,42 @@ export interface VoucherCampaignPublic {
   applicableServiceTypeIds?: string[];
   /** RỖNG = mọi loại xe đều dùng được. */
   applicableVehicleTypeIds?: string[];
+
+  /**
+   * Số voucher còn chưa ai nhận trong pool. CHỈ là tồn kho pool - không phải
+   * ngân sách và cũng không phải `maxUsesTotal` (khách không được thấy hai thứ
+   * đó). Có ở các endpoint /voucher-campaigns; VẮNG khi chiến dịch được nhúng
+   * trong payload khác, ví dụ `VoucherResponse.campaign`.
+   */
+  remaining?: number;
+  /** Viết tắt của `remaining === 0`, để thẻ hiện "Hết lượt" trước khi khách bấm. */
+  soldOut?: boolean;
+  /**
+   * Khách đang đăng nhập đã dùng hết suất `maxUsesPerCustomer` của chiến dịch.
+   * CHỈ được tính khi request có bearer token; VẮNG với request ẩn danh - lúc
+   * đó nghĩa là "không biết" và KHÔNG được hiển thị thành "chưa nhận".
+   */
+  alreadyClaimed?: boolean;
+}
+
+/**
+ * Tham số `GET /voucher-campaigns` - trang ưu đãi công khai.
+ * `status` bỏ trống = BE mặc định `active` (các chương trình đang chạy).
+ */
+export interface VoucherCampaignPublicQuery {
+  status?: VoucherCampaignPublicStatus;
+  page?: number;
+  /** Tối đa 100 theo guardrail BE. */
+  limit?: number;
+}
+
+/**
+ * `VoucherCampaignPublicListResponse` - GET /voucher-campaigns.
+ * Phân trang do BE làm (khác /me/vouchers vốn trả mảng trần).
+ */
+export interface VoucherCampaignPublicListResponse {
+  data: VoucherCampaignPublic[];
+  meta: PaginationMeta;
 }
 
 /** `VoucherResponse`. */
@@ -152,14 +192,27 @@ export interface GrantVoucherPayload {
   reason?: string;
 }
 
-/** POST /admin/vouchers/bulk - `BulkCreateVoucher`. */
+/**
+ * POST /admin/vouchers/bulk - `BulkCreateVoucher`.
+ *
+ * Khi có `campaignId`, chiến dịch nắm luật ("campaign owns the rules"):
+ * `expiresAt` và `discountCapVnd` KHÔNG còn tác dụng, nên UI phải khoá hai ô đó
+ * lại thay vì để admin tưởng mình đặt được.
+ */
 export interface BulkCreateVoucherPayload {
   /** 1..1000. */
   quantity: number;
   /** Tiền tố `^[A-Z0-9]{1,15}$`. Mã sinh ra: PREFIX-XXXXXXXXXX (hậu tố ngẫu nhiên). */
   prefix?: string;
-  /** 1..200000, mặc định 100000. */
+  /**
+   * Gắn lô voucher vào pool của một chiến dịch. Có nó thì thẻ ưu đãi mới hiện
+   * cho khách và nút "Nhận" một chạm mới có hàng để rút.
+   * BE chặn trước khi mint nếu lô vượt `maxUsesTotal` của chiến dịch.
+   */
+  campaignId?: string;
+  /** 1..200000, mặc định 100000. BỎ QUA khi có `campaignId`. */
   discountCapVnd?: number;
+  /** BỎ QUA khi có `campaignId` - `validUntil` của chiến dịch thắng. */
   expiresAt?: string;
   /** Lưu trên mọi voucher trong lô. Mặc định "Lô phát hành <PREFIX>". */
   reason?: string;

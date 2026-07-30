@@ -10,6 +10,8 @@ import type {
 import type {
   Voucher,
   VoucherCampaignPublic,
+  VoucherCampaignPublicListResponse,
+  VoucherCampaignPublicQuery,
   VoucherStatus,
 } from '@/types/voucher';
 
@@ -77,6 +79,21 @@ export const claimVoucher = (code: string) =>
   axiosInstance.post<Voucher>(ENDPOINTS.vouchers.claim, { code });
 
 /**
+ * GET /voucher-campaigns — danh sách chương trình ưu đãi khách được xem.
+ * Không cần đăng nhập. `status` bỏ trống = BE trả các chương trình ĐANG CHẠY
+ * (`active`) và còn trong thời gian hiệu lực; `draft` bị từ chối 400.
+ *
+ * BE cố ý KHÔNG trả `publicClaimCode`, nên trang này chỉ giới thiệu ưu đãi —
+ * muốn nhận, khách vẫn phải nhập mã cửa hàng gửi cho mình qua
+ * POST /me/vouchers/claim.
+ */
+export const getVoucherCampaigns = (params?: VoucherCampaignPublicQuery) =>
+  axiosInstance.get<VoucherCampaignPublicListResponse>(
+    ENDPOINTS.voucherCampaigns.list,
+    { params },
+  );
+
+/**
  * GET /voucher-campaigns/:id — bản chiếu công khai của chiến dịch.
  * Chỉ cần khi voucher thiếu `campaign` nhúng sẵn: ví voucher nên đọc thẳng
  * `voucher.campaign` để khỏi gọi thêm mỗi thẻ. Chiến dịch DRAFT trả 404.
@@ -85,6 +102,20 @@ export const getVoucherCampaign = (id: string) =>
   axiosInstance.get<VoucherCampaignPublic>(
     ENDPOINTS.voucherCampaigns.byId(id),
   );
+
+/**
+ * POST /voucher-campaigns/:id/claim — nhận một voucher từ pool của chiến dịch.
+ *
+ * Không gửi body: id chiến dịch trên path là toàn bộ request. Server rút một
+ * voucher chưa ai nhận rồi gán cho khách đang đăng nhập, kiểm theo thứ tự
+ * chiến dịch đang chạy → hạng thành viên → ngân sách → suất mỗi khách → tồn kho.
+ *
+ * Cùng kết quả với `/me/vouchers/claim` bằng `publicClaimCode`, khác ở chỗ báo
+ * lỗi: route theo mã gộp mọi từ chối thành 404 để không lộ mã nào tồn tại, còn
+ * route này nói rõ nguyên nhân vì id chiến dịch vốn đã công khai.
+ */
+export const claimCampaignVoucher = (campaignId: string) =>
+  axiosInstance.post<Voucher>(ENDPOINTS.voucherCampaigns.claim(campaignId));
 
 // ─── Notifications ─────────────────────────────────────
 export const getNotifications = (page = 1, limit = 20) =>

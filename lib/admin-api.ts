@@ -17,7 +17,11 @@ import type {
   VoucherStats,
   VoucherStatus,
 } from '@/types/voucher';
-import type { WasherLiveStatus } from '@/types/washer';
+import type {
+  WasherFeedbackList,
+  WasherFeedbackSummary,
+  WasherLiveStatus,
+} from '@/types/washer';
 
 // ─── Auth ──────────────────────────────────────────────
 export const adminGetMe = () => axiosInstance.get('/auth/me');
@@ -57,6 +61,30 @@ export const adminResetUserPassword = (id: string, newPassword: string) =>
 // ─── Giám sát thợ (Manager/Admin) ───────────────────────
 export const adminGetWasherStatus = () =>
   axiosInstance.get<WasherLiveStatus[]>(ENDPOINTS.adminShifts.washerStatus);
+
+// ─── Đánh giá của khách (Manager/Admin) ─────────────────
+/**
+ * GET /admin/feedback - danh sách đánh giá, lọc theo thợ hoặc theo đơn.
+ * Không truyền filter = mọi đánh giá của toàn hệ thống.
+ */
+export const adminGetFeedback = (params?: {
+  washerId?: string;
+  orderId?: string;
+  page?: number;
+  limit?: number;
+}) =>
+  axiosInstance.get<WasherFeedbackList>(ENDPOINTS.adminFeedback.list, {
+    params,
+  });
+
+/**
+ * GET /admin/feedback/washers/:washerId/summary - điểm trung bình, số lượt và
+ * phân bố sao của MỘT thợ. BE không có endpoint tổng hợp cho toàn hệ thống.
+ */
+export const adminGetWasherFeedbackSummary = (washerId: string) =>
+  axiosInstance.get<WasherFeedbackSummary>(
+    ENDPOINTS.adminFeedback.washerSummary(washerId),
+  );
 
 // ─── Orders/Bookings (Manager) ──────────────────────────
 export const adminGetOrders = (params?: Record<string, unknown>) =>

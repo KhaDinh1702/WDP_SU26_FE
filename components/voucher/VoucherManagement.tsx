@@ -4,6 +4,7 @@ import {
   adminGetVouchers,
   adminGetVoucherStats,
   adminGetVoucherBatches,
+  adminGetVoucherCampaigns,
   adminGrantVoucher,
   adminBulkCreateVouchers,
   adminRevokeVoucher,
@@ -14,6 +15,7 @@ import type {
   BulkCreateVoucherPayload,
   GrantVoucherPayload,
   VoucherBatch,
+  VoucherCampaign,
   VoucherStats,
   VoucherStatus,
 } from '@/types/voucher';
@@ -89,12 +91,14 @@ type CreateVoucherSubmit =
 function VoucherCreateModal({
   mode,
   customers,
+  campaigns,
   onClose,
   onSubmit,
   submitting,
 }: {
   mode: VoucherMode;
   customers: CustomerLite[];
+  campaigns: VoucherCampaign[];
   onClose: () => void;
   onSubmit: (result: CreateVoucherSubmit) => void;
   submitting: boolean;
@@ -110,6 +114,8 @@ function VoucherCreateModal({
   // pool
   const [quantity, setQuantity] = useState(10);
   const [prefix, setPrefix] = useState('');
+  // Lô gắn vào chiến dịch nào. Rỗng = voucher rời, chỉ nhận được bằng cách gõ mã.
+  const [campaignId, setCampaignId] = useState('');
 
   // grant
   const [customerId, setCustomerId] = useState('');
@@ -134,9 +140,13 @@ function VoucherCreateModal({
     reason.trim() === '' ||
     (reason.trim().length >= 5 && reason.trim().length <= 500);
 
+  /** Lô đang gắn vào một chiến dịch → chiến dịch quyết định hạn dùng và mức giảm. */
+  const boundToCampaign = tab === 'pool' && campaignId !== '';
+
   const canSubmit =
-    capValid &&
     reasonValid &&
+    // Trần giảm chỉ còn ý nghĩa với voucher rời.
+    (boundToCampaign || capValid) &&
     (tab === 'pool'
       ? quantityValid && prefixValid
       : customerId.trim().length > 0 && codeValid);
@@ -146,13 +156,16 @@ function VoucherCreateModal({
     const iso = expiresAt ? new Date(expiresAt).toISOString() : undefined;
     const reasonPayload = reason.trim() ? { reason: reason.trim() } : {};
     if (tab === 'pool') {
+      // Lô thuộc chiến dịch thì chiến dịch nắm luật: KHÔNG gửi kèm expiresAt và
+      // discountCapVnd — BE bỏ qua chúng, gửi lên chỉ tạo ảo giác là đã đặt được.
       onSubmit({
         mode: 'pool',
         payload: {
           quantity,
-          discountCapVnd,
           ...(prefix.trim() ? { prefix: prefix.trim().toUpperCase() } : {}),
-          ...(iso ? { expiresAt: iso } : {}),
+          ...(boundToCampaign
+            ? { campaignId }
+            : { discountCapVnd, ...(iso ? { expiresAt: iso } : {}) }),
           ...reasonPayload,
         },
       });
@@ -229,6 +242,33 @@ function VoucherCreateModal({
         <div className='flex flex-col gap-4'>
           {tab === 'pool' ? (
             <>
+              {/* Chiến dịch — quyết định lô này có hiện thành thẻ cho khách không */}
+              <div>
+                <label className='block text-xs font-medium text-muted-foreground mb-1.5'>
+                  Thuộc chiến dịch
+                </label>
+                <select
+                  value={campaignId}
+                  onChange={(e) => setCampaignId(e.target.value)}
+                  className='w-full border border-input bg-background rounded-lg px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                >
+                  <option value=''>
+                    Không thuộc chiến dịch (khách phải gõ mã)
+                  </option>
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                      {c.status !== 'active' ? ` — ${c.status}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className='mt-1.5 text-[11px] text-muted-foreground'>
+                  {boundToCampaign
+                    ? 'Lô này vào kho của chiến dịch — khách bấm "Nhận" trên trang Ưu đãi là lấy được.'
+                    : 'Voucher rời không hiện thành thẻ ưu đãi; khách chỉ nhận được nếu bạn đưa mã cho họ.'}
+                </p>
+              </div>
+
               {/* Số lượng */}
               <div>
                 <label className='block text-xs font-medium text-muted-foreground mb-1.5'>
@@ -404,42 +444,63 @@ function VoucherCreateModal({
             )}
           </div>
 
-          {/* Giảm tối đa (chung) */}
-          <div>
-            <label className='block text-xs font-medium text-muted-foreground mb-1.5'>
-              Giảm tối đa (VND)
-            </label>
-            <input
-              type='number'
-              min={1}
-              max={200000}
-              step={1000}
-              value={discountCapVnd}
-              onChange={(e) => setDiscountCapVnd(Number(e.target.value))}
-              className='w-full border border-input bg-background rounded-lg px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-            />
-            {!capValid && (
-              <p className='mt-1.5 text-[11px] text-destructive'>
-                Mức giảm phải từ 1 đến 200.000đ.
+          {/*
+            Lô thuộc chiến dịch thì "campaign owns the rules": mức giảm do
+            benefitType + discountValue của chiến dịch quyết định, hạn dùng do
+            validUntil quyết định. BE bỏ qua hai field dưới đây, nên khoá lại
+            thay vì để admin nhập rồi tưởng đã đặt được.
+          */}
+          {boundToCampaign ? (
+            <div className='rounded-lg border border-primary/30 bg-accent p-3.5'>
+              <p className='flex items-start gap-2 text-xs text-foreground'>
+                <AlertCircle className='mt-px size-3.5 shrink-0 text-primary' />
+                <span>
+                  Mức giảm và hạn dùng lấy theo{' '}
+                  <span className='font-semibold'>chiến dịch</span>. Muốn đổi thì
+                  sửa ở trang Chiến dịch ưu đãi, không đặt tại lô.
+                </span>
               </p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <>
+              {/* Giảm tối đa (voucher rời) */}
+              <div>
+                <label className='block text-xs font-medium text-muted-foreground mb-1.5'>
+                  Giảm tối đa (VND)
+                </label>
+                <input
+                  type='number'
+                  min={1}
+                  max={200000}
+                  step={1000}
+                  value={discountCapVnd}
+                  onChange={(e) => setDiscountCapVnd(Number(e.target.value))}
+                  className='w-full border border-input bg-background rounded-lg px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                />
+                {!capValid && (
+                  <p className='mt-1.5 text-[11px] text-destructive'>
+                    Mức giảm phải từ 1 đến 200.000đ.
+                  </p>
+                )}
+              </div>
 
-          {/* Hết hạn (chung) */}
-          <div>
-            <label className='block text-xs font-medium text-muted-foreground mb-1.5'>
-              Ngày hết hạn{' '}
-              <span className='normal-case text-placeholder'>
-                (bỏ trống = 90 ngày)
-              </span>
-            </label>
-            <input
-              type='date'
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-              className='w-full border border-input bg-background rounded-lg px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-            />
-          </div>
+              {/* Hết hạn (voucher rời) */}
+              <div>
+                <label className='block text-xs font-medium text-muted-foreground mb-1.5'>
+                  Ngày hết hạn{' '}
+                  <span className='normal-case text-placeholder'>
+                    (bỏ trống = 90 ngày)
+                  </span>
+                </label>
+                <input
+                  type='date'
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className='w-full border border-input bg-background rounded-lg px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                />
+              </div>
+            </>
+          )}
         </div>
 
         <div className='flex gap-3 mt-6'>
@@ -731,6 +792,19 @@ export function VoucherManagement({ mode }: { mode: VoucherMode }) {
     },
   });
   const customers = customersData ?? [];
+
+  // Chiến dịch để gắn lô voucher vào. Chỉ lấy những chiến dịch còn nhận thêm
+  // voucher — đã kết thúc thì không mint vào được nữa.
+  const { data: campaignsData } = useQuery({
+    // Cùng tiền tố với key ở trang quản trị chiến dịch để `invalidateQueries`
+    // bên đó (khớp theo tiền tố) làm mới luôn ô chọn này.
+    queryKey: ['admin-voucher-campaigns', 'for-batch'],
+    queryFn: async (): Promise<VoucherCampaign[]> => {
+      const res = await adminGetVoucherCampaigns({ limit: 100 });
+      return (res.data?.data ?? []).filter((c) => c.status !== 'ended');
+    },
+  });
+  const campaigns = campaignsData ?? [];
   const customerName = (id?: string) =>
     (id ? customers.find((c) => c.id === id)?.name : undefined) ?? id ?? '';
 
@@ -1066,6 +1140,7 @@ export function VoucherManagement({ mode }: { mode: VoucherMode }) {
         <VoucherCreateModal
           mode={mode}
           customers={customers}
+          campaigns={campaigns}
           submitting={bulkCreate.isPending || grant.isPending}
           onClose={() => setShowGrant(false)}
           onSubmit={(result) => {

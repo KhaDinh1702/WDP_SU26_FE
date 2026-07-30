@@ -14,6 +14,7 @@ import {
     Bot,
     Eye,
     Star,
+    Sparkles,
 } from 'lucide-react';
 
 // Mọi role dùng chung hệ màu thương hiệu (primary) — phân biệt role bằng
@@ -33,8 +34,14 @@ export const SIDEBAR_CONFIG = {
             { href: '/admin/orders', icon: CreditCard, label: 'Hóa đơn' },
             { href: '/admin/shifts', icon: Clock, label: 'Ca làm việc' },
             { href: '/admin/washers', icon: Eye, label: 'Giám sát thợ rửa' },
+            { href: '/admin/feedback', icon: Star, label: 'Đánh giá khách hàng' },
             { href: '/admin/tiers', icon: Crown, label: 'Hạng thành viên' },
             { href: '/admin/vouchers', icon: Ticket, label: 'Voucher' },
+            {
+              href: '/admin/voucher-campaigns',
+              icon: Sparkles,
+              label: 'Chiến dịch ưu đãi',
+            },
             { href: '/admin/chat-knowledge', icon: Bot, label: 'Huấn luyện AI' },
             { href: '/admin/settings', icon: Settings, label: 'Cài đặt' },
         ],
