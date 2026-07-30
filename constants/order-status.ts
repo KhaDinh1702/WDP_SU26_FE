@@ -73,11 +73,46 @@ export const TERMINAL_ORDER_STATUSES: OrderStatus[] = [
   ORDER_STATUS.NO_SHOW,
 ];
 
+export function isActiveOrderStatus(status: OrderStatus): boolean {
+  return ACTIVE_ORDER_STATUSES.includes(status);
+}
+
+/**
+ * Số đơn đang giữ slot mà một khách được có cùng lúc - mirror BE (vượt hạn mức
+ * thì `POST /me/orders` trả 400 "You already have 3 active orders (limit 3)").
+ * BE hard-code hạn mức này, chưa expose qua API nào → BE nới thì sửa cả ở đây.
+ *
+ * Hằng số này chỉ để CHẶN TRƯỚC cho khách khỏi đi hết luồng đặt lịch rồi mới bị
+ * từ chối; BE vẫn là nơi quyết định cuối cùng.
+ */
+export const MAX_ACTIVE_ORDERS = 3;
+
 /** Khách hàng chỉ được tự hủy trước khi bắt đầu rửa. */
 export function isCancellableByCustomer(status: OrderStatus): boolean {
   return (
     status === ORDER_STATUS.PENDING_PAYMENT ||
     status === ORDER_STATUS.CONFIRMED
+  );
+}
+
+/**
+ * Số lần khách được tự đổi lịch một đơn - mirror BE (vượt hạn mức thì BE trả
+ * 400 "Reschedule limit reached (2)"). BE đang hard-code hạn mức này, chưa
+ * expose qua API nào, nên nếu BE nới hạn mức thì phải sửa cả ở đây.
+ *
+ * Hằng số này chỉ để CHẶN TRƯỚC cho khỏi gửi request thừa; BE vẫn là nơi
+ * quyết định cuối cùng và `RescheduleOrderModal` vẫn xử lý lỗi 400 đó.
+ */
+export const MAX_CUSTOMER_RESCHEDULE = 2;
+
+/** Khách còn được đổi lịch đơn này không: đúng trạng thái VÀ còn lượt đổi. */
+export function isReschedulableByCustomer(order: {
+  status: OrderStatus;
+  rescheduleCount?: number;
+}): boolean {
+  return (
+    isCancellableByCustomer(order.status) &&
+    (order.rescheduleCount ?? 0) < MAX_CUSTOMER_RESCHEDULE
   );
 }
 

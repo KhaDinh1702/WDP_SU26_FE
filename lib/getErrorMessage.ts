@@ -44,6 +44,21 @@ export function getErrorMessage(error: unknown): string {
   return 'Có lỗi xảy ra. Vui lòng thử lại.';
 }
 
+/**
+ * Message thô do BE trả về, KHÔNG lọc/dịch gì.
+ *
+ * Dùng khi màn hình cần nhận ra một lỗi nghiệp vụ cụ thể để nói rõ hơn câu
+ * chung của `getErrorMessage` — vì BE trả nhiều lỗi nghiệp vụ bằng tiếng Anh
+ * kỹ thuật (vd "Reschedule limit reached (2)") và những message đó bị
+ * `isUserFriendlyMessage` loại. Chỉ so khớp, đừng đem thẳng ra UI.
+ */
+export function getRawServerMessage(error: unknown): string {
+  if (axios.isAxiosError<ApiErrorResponse>(error)) {
+    return error.response?.data?.message ?? '';
+  }
+  return '';
+}
+
 function isUserFriendlyMessage(message: string): boolean {
   if (message.length > 140) return false;
   if (

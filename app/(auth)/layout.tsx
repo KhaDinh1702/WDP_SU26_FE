@@ -12,6 +12,7 @@ interface LayoutProps {
 export default function AuthLayout({ children }: LayoutProps) {
   const { accessToken, _hasHydrated, authUser } = useAuthStore();
   const setAccessToken = useAuthStore((s) => s.setAccessToken);
+  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
   const setUser = useAuthStore((s) => s.setUser);
   const router = useRouter();
 
@@ -31,10 +32,21 @@ export default function AuthLayout({ children }: LayoutProps) {
         router.replace('/');
       }
     } else if (accessToken && !authUser) {
+      // Phiên hỏng (có token nhưng mất user): xoá sạch cả refreshToken, nếu
+      // để sót thì lần đăng xuất sau sẽ gửi token cũ đã vô hiệu.
       setAccessToken(null);
+      setRefreshToken(null);
       setUser(null);
     }
-  }, [_hasHydrated, accessToken, authUser, router, setAccessToken, setUser]);
+  }, [
+    _hasHydrated,
+    accessToken,
+    authUser,
+    router,
+    setAccessToken,
+    setRefreshToken,
+    setUser,
+  ]);
 
   if (!_hasHydrated) {
     return (

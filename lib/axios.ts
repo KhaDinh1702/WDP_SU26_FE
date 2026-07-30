@@ -1,6 +1,17 @@
 import { useAuthStore } from '@/store/useAuthStore';
 import axios from 'axios';
 
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    /** Đã thử lại sau khi refresh chưa - chặn retry vòng hai. */
+    _retry?: boolean;
+    /** Access token đã gắn cho request này, để nhận ra token đã bị rotate. */
+    _accessToken?: string;
+    /** Đã gọi lại bằng token mới hơn trong store chưa (chưa refresh). */
+    _tokenSwapped?: boolean;
+  }
+}
+
 export const axiosInstance = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   withCredentials: true,
@@ -29,6 +40,7 @@ axiosInstance.interceptors.request.use(
     );
     if (accessToken && !isPublicEndpoint) {
       config.headers.Authorization = `Bearer ${accessToken}`;
+      config._accessToken = accessToken;
     }
     return config;
   },
@@ -36,25 +48,6 @@ axiosInstance.interceptors.request.use(
     return Promise.reject(error);
   },
 );
-
-let isRefreshing = false;
-interface FailedRequest {
-  resolve: (value: string | null | PromiseLike<string | null>) => void;
-  reject: (reason?: unknown) => void;
-}
-
-let failedQueue: FailedRequest[] = [];
-
-const processQueue = (error: unknown, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
 
 axiosInstance.interceptors.response.use(
   (response) => response,
@@ -67,35 +60,37 @@ axiosInstance.interceptors.response.use(
       !originalRequest.url?.includes('/auth/refresh') &&
       !originalRequest.url?.includes('/auth/logout')
     ) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return axiosInstance(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
+      const { accessToken, refreshAccessToken } = useAuthStore.getState();
+
+      // Request đang bay lúc token được rotate thì về 401 với token đã cũ.
+      // Trong store đã có token mới rồi - gọi lại ngay, đừng rotate thêm một
+      // vòng (mỗi vòng rotate là một dịp để hai refresh chồng nhau). Chỉ đổi
+      // token một lần; token mới mà vẫn 401 thì rơi xuống nhánh refresh.
+      if (
+        accessToken &&
+        originalRequest._accessToken &&
+        originalRequest._accessToken !== accessToken &&
+        !originalRequest._tokenSwapped
+      ) {
+        originalRequest._tokenSwapped = true;
+        return axiosInstance(originalRequest);
       }
 
+      // Đánh dấu TRƯỚC khi gọi lại: mỗi request chỉ được refresh + thử lại đúng
+      // một lần. (Hàng đợi cũ chỉ set cờ này cho request "dẫn đầu", nên request
+      // đi kèm mà 401 lần nữa là lại vào đây và kích thêm một vòng refresh.)
       originalRequest._retry = true;
-      isRefreshing = true;
 
-      const { refreshAccessToken } = useAuthStore.getState();
+      // `refreshAccessToken` tự gộp các lời gọi song song, nên N request 401
+      // cùng lúc chỉ sinh ra đúng 1 POST /auth/refresh - không còn cảnh hai
+      // request cùng gửi một refresh token rồi ăn 401 "Refresh token revoked".
       try {
         const newToken = await refreshAccessToken();
-        if (newToken) {
-          processQueue(null, newToken);
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          return axiosInstance(originalRequest);
-        }
-        processQueue(error, null);
-        return Promise.reject(error);
+        if (!newToken) return Promise.reject(error);
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return axiosInstance(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError, null);
         return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
       }
     }
 

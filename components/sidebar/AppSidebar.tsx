@@ -2,11 +2,11 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { LogOut, ChevronLeft, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
-import { axiosInstance } from '@/lib/axios';
+import { useLogout } from '@/hooks/auth/useLogout';
 import { AccountDialog } from '@/components/profile/AccountDialog';
 import { SIDEBAR_CONFIG } from './sidebar-config';
 
@@ -16,25 +16,13 @@ type Props = {
 
 export function AppSidebar({ role }: Props) {
   const pathname = usePathname();
-  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const { setAccessToken, setUser, authUser } = useAuthStore();
+  const authUser = useAuthStore((s) => s.authUser);
+  const logout = useLogout();
   const config = SIDEBAR_CONFIG[role];
 
-  const handleLogout = async () => {
-    try {
-      await axiosInstance.post('/auth/logout', {
-        refreshToken: localStorage.getItem('refreshToken'),
-      });
-    } catch {
-      // ignore
-    } finally {
-      setAccessToken(null);
-      setUser(null);
-      router.replace('/login');
-    }
-  };
+  const handleLogout = () => logout('/login');
 
   const initials =
     authUser?.name

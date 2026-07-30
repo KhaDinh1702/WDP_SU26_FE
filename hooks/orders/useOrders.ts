@@ -10,6 +10,7 @@ import {
   getActiveServiceTypes,
   getMyLoyalty,
   previewOrder,
+  getFeedbackEligibility,
 } from '@/lib/customer-api';
 import {
   CreateOrderDto,
@@ -18,6 +19,7 @@ import {
   PreviewOrderResponse,
 } from '@/types/order';
 import type { LoyaltyAccount } from '@/types/loyalty';
+import type { Feedback, FeedbackEligibility } from '@/types/feedback';
 
 export const useMyOrders = () => {
   return useQuery({
@@ -70,6 +72,38 @@ export const useMyOrderWashPhotos = (
     },
     enabled: enabled && !!orderId,
     staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+};
+
+/** Key cache đánh giá của một đơn - dùng chung để seed lại sau khi gửi. */
+export const myOrderFeedbackKey = (orderId: string) =>
+  ['my-order-feedback', orderId] as const;
+
+/**
+ * Đánh giá khách đã gửi cho một đơn + quyền chấm điểm - `GET /me/feedback/:orderId`.
+ * Đơn chưa chấm điểm trả `feedback: null`, nên đây là nguồn DUY NHẤT lấy được
+ * nội dung nhận xét (đơn chỉ mang số sao qua `orderRating`).
+ * `retry: false` vì đơn không thuộc khách sẽ trả 403/404, thử lại cũng vậy.
+ */
+export const useMyOrderFeedback = (
+  orderId: string | null | undefined,
+  enabled = true,
+) => {
+  return useQuery({
+    queryKey: myOrderFeedbackKey(orderId ?? ''),
+    queryFn: async (): Promise<FeedbackEligibility | null> => {
+      if (!orderId) return null;
+      const res = await getFeedbackEligibility(orderId);
+      const raw = res.data?.data ?? res.data ?? null;
+      if (!raw) return null;
+      return {
+        eligible: raw.eligible === true,
+        alreadyRated: raw.alreadyRated === true,
+        feedback: (raw.feedback as Feedback | undefined) ?? null,
+      };
+    },
+    enabled: enabled && !!orderId,
     retry: false,
   });
 };

@@ -26,6 +26,10 @@ export function NotificationSocketBridge() {
 
   // true kể từ lúc rớt kết nối cho tới lần connect kế tiếp.
   const wasDisconnected = useRef(false);
+  // Access token đã refresh vì lỗi auth của socket. Socket.io tự nối lại nên
+  // `connect_error` bắn liên tục theo backoff; không chốt lại thì mỗi lần thử
+  // nối là một lần rotate refresh token vô ích.
+  const refreshedFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -42,6 +46,8 @@ export function NotificationSocketBridge() {
     // Token hết hạn giữa chừng: BE bắn auth:error rồi ngắt. Refresh xong,
     // accessToken trong store đổi → effect này chạy lại và connect lại.
     const onAuthError = () => {
+      if (refreshedFor.current === accessToken) return;
+      refreshedFor.current = accessToken;
       void refreshAccessToken().catch(() => {
         // Refresh thất bại → store đã tự xoá phiên; effect logout bên dưới ngắt socket.
       });

@@ -41,8 +41,12 @@ import {
   ORDER_STATUS_META,
   PAYMENT_STATUS_META,
   isCancellableByCustomer,
+  isReschedulableByCustomer,
+  MAX_CUSTOMER_RESCHEDULE,
+  MAX_ACTIVE_ORDERS,
   isSettledPayment,
 } from '@/constants';
+import { activeOrderLimitMessage, getActiveOrders } from '@/lib/order-rules';
 import { Order, OrderStatus } from '@/types/order';
 
 interface ServiceTypeOption {
@@ -207,6 +211,26 @@ export default function MyOrdersPage() {
 
   const pendingCount = tabCounts['pending'] ?? 0;
 
+  // Hạn mức đơn đang hoạt động: báo ngay ở nút vào luồng đặt lịch, đừng để khách
+  // chọn xe/gói/giờ/thanh toán xong rồi mới nhận 400 từ BE ở bước tạo đơn.
+  const activeOrderCount = useMemo(
+    () => getActiveOrders(orders).length,
+    [orders],
+  );
+
+  const goToBooking = () => {
+    if (activeOrderCount >= MAX_ACTIVE_ORDERS) {
+      const { title, description } = activeOrderLimitMessage();
+      toast.error(title, {
+        id: 'active-order-limit',
+        description,
+        duration: 8000,
+      });
+      return;
+    }
+    router.push('/booking');
+  };
+
   // Lọc theo tab + từ khóa, sau đó sắp xếp theo lựa chọn.
   const filteredOrders = useMemo(() => {
     const tab = TAB_GROUPS.find((t) => t.id === activeTab) ?? TAB_GROUPS[0];
@@ -304,7 +328,7 @@ export default function MyOrdersPage() {
           </p>
         </div>
         <Button
-          onClick={() => router.push('/booking')}
+          onClick={goToBooking}
           className='bg-primary hover:bg-primary/95 text-white rounded-xl px-5 py-2.5 font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer'
         >
           Đặt lịch ngay
@@ -449,7 +473,7 @@ export default function MyOrdersPage() {
                   Đặt lịch rửa xe đầu tiên để bắt đầu tích điểm thành viên.
                 </p>
                 <Button
-                  onClick={() => router.push('/booking')}
+                  onClick={goToBooking}
                   size='sm'
                   className='rounded-xl text-xs font-bold mt-1'
                 >
@@ -485,6 +509,7 @@ export default function MyOrdersPage() {
             const paymentMeta = PAYMENT_STATUS_META[order.paymentStatus];
             const isPendingPayment = order.status === 'pending_payment';
             const canModify = isCancellableByCustomer(order.status);
+            const canReschedule = isReschedulableByCustomer(order);
             // BE quyết định đơn có được chấm điểm hay không (`canRate`) và đã
             // chấm chưa (`alreadyRated`) - không suy từ mỗi trạng thái đơn.
             const alreadyRated =
@@ -625,11 +650,19 @@ export default function MyOrdersPage() {
                         <Button
                           size='sm'
                           variant='outline'
+                          disabled={!canReschedule}
                           onClick={() => setReschedulingOrder(order)}
                           className='rounded-xl text-xs font-semibold h-8 px-3 border-border hover:bg-muted cursor-pointer'
                         >
                           Đổi lịch
                         </Button>
+                        {/* Nút disabled có `pointer-events-none` nên tooltip
+                            `title` không bao giờ hiện - ghi lý do ra cạnh nút. */}
+                        {!canReschedule && (
+                          <span className='text-[10px] font-semibold text-warning'>
+                            Đã dùng hết {MAX_CUSTOMER_RESCHEDULE} lần đổi lịch
+                          </span>
+                        )}
                         <Button
                           size='sm'
                           variant='outline'
