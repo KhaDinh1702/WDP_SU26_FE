@@ -21,10 +21,16 @@ import {
   useCancelOrder,
   useRescheduleOrder,
   useAvailableSlots,
+  useMyOrders,
 } from '@/hooks/orders/useOrders';
 import { submitFeedback } from '@/lib/customer-api';
 import { cn } from '@/lib/utils';
 import { toLocalDateKey } from '@/lib/format';
+import {
+  findVehicleBusyConflict,
+  getRescheduleLimitReached,
+  getVehicleBusyRanges,
+} from '@/lib/order-rules';
 import { Order, AvailableSlot } from '@/types/order';
 
 /** Xe của khách - shape tối thiểu các modal cần. */
@@ -99,15 +105,37 @@ export function RescheduleOrderModal({
   const { data: availableSlots = [], isLoading: isLoadingSlots } =
     useAvailableSlots(slotQueryParams);
 
+  // BE từ chối đổi lịch sang giờ mà CHÍNH chiếc xe này đã có lịch rửa khác
+  // (409). Dựng lại các khoảng đã bị chiếm để disable trước — trừ chính đơn đang
+  // đổi, vì lịch cũ của nó sẽ được nhả ra.
+  const { data: myOrders = [] } = useMyOrders();
+  const vehicleBusyRanges = useMemo(
+    () =>
+      getVehicleBusyRanges(myOrders as Order[], {
+        vehicleId: order.vehicleId,
+        excludeOrderId: order.id || order._id,
+      }),
+    [myOrders, order],
+  );
+
+  const selectedSlotConflict = rescheduleSlot
+    ? findVehicleBusyConflict(
+        rescheduleSlot,
+        order.estimatedMinutes,
+        vehicleBusyRanges,
+      )
+    : undefined;
+  const effectiveSlot = selectedSlotConflict ? '' : rescheduleSlot;
+
   const handleSubmit = async () => {
-    if (!rescheduleSlot) return;
+    if (!effectiveSlot) return;
     try {
       toast.loading('Đang xử lý đổi lịch...');
       // Ca trực là ẩn danh: khách chọn giờ, BE tự tìm ca còn chỗ phủ giờ đó
       // (giống lúc đặt lịch). FE không đoán ca nữa.
       await rescheduleMutation.mutateAsync({
         id: order.id,
-        data: { scheduledAt: rescheduleSlot },
+        data: { scheduledAt: effectiveSlot },
       });
       toast.dismiss();
       toast.success('Đã đổi lịch thành công!');
@@ -116,6 +144,18 @@ export function RescheduleOrderModal({
     } catch (error) {
       toast.dismiss();
       console.error(error);
+      const limitReached = getRescheduleLimitReached(error);
+      if (limitReached !== null) {
+        toast.error(
+          `Lịch hẹn này đã hết số lần đổi (tối đa ${limitReached} lần)`,
+          {
+            description:
+              'Lịch cũ vẫn được giữ nguyên. Nếu bạn vẫn cần giờ khác, hãy hủy lịch hẹn này rồi đặt lịch mới.',
+            duration: 8000,
+          },
+        );
+        return;
+      }
       toast.error('Không thể đổi lịch.', {
         description: getErrorMessage(error),
       });
@@ -193,8 +233,17 @@ export function RescheduleOrderModal({
               ) : (
                 <div className='grid grid-cols-3 sm:grid-cols-4 gap-2.5 max-h-40 overflow-y-auto pr-1'>
                   {availableSlots.map((slot: AvailableSlot) => {
-                    const isSelected = slot.scheduledAt === rescheduleSlot;
+                    const isSelected = slot.scheduledAt === effectiveSlot;
                     const isFull = slot.remainingCapacity <= 0;
+                    // Xe này đã có lịch rửa chồng lấn giờ đó → BE trả 409.
+                    const isBusy =
+                      !isFull &&
+                      !!findVehicleBusyConflict(
+                        slot.scheduledAt,
+                        order.estimatedMinutes,
+                        vehicleBusyRanges,
+                      );
+                    const isDisabled = isFull || isBusy;
                     const timeStr = new Date(slot.scheduledAt).toLocaleTimeString(
                       'vi-VN',
                       { hour: '2-digit', minute: '2-digit', hour12: false },
@@ -203,27 +252,57 @@ export function RescheduleOrderModal({
                       <button
                         key={slot.scheduledAt}
                         type='button'
-                        disabled={isFull}
+                        disabled={isDisabled}
                         onClick={() => setRescheduleSlot(slot.scheduledAt)}
                         className={cn(
                           'p-2.5 rounded-xl border-2 transition-all text-center cursor-pointer focus:outline-none flex flex-col items-center justify-center',
                           isSelected
                             ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                            : isFull
+                            : isDisabled
                               ? 'border-border bg-muted text-placeholder cursor-not-allowed'
                               : 'border-border bg-card hover:bg-muted/50',
                         )}
                       >
-                        <span className='font-semibold text-xs text-foreground'>
+                        <span
+                          className={cn(
+                            'font-semibold text-xs',
+                            isDisabled ? 'text-placeholder' : 'text-foreground',
+                          )}
+                        >
                           {timeStr}
                         </span>
-                        <span className='text-[8px] font-bold mt-0.5 text-success'>
-                          Trống {slot.remainingCapacity}
+                        {/* Nút disabled có `pointer-events-none` nên tooltip
+                            `title` không hiện — ghi lý do ra ô. */}
+                        <span
+                          className={cn(
+                            'text-[8px] font-bold mt-0.5',
+                            isBusy ? 'text-placeholder' : 'text-success',
+                          )}
+                        >
+                          {isBusy
+                            ? 'Trùng lịch'
+                            : `Trống ${slot.remainingCapacity}`}
                         </span>
                       </button>
                     );
                   })}
                 </div>
+              )}
+
+              {selectedSlotConflict && (
+                <p className='text-[11px] font-semibold text-warning bg-warning/10 border border-warning/30 rounded-xl p-2.5'>
+                  Xe này đã có lịch rửa lúc{' '}
+                  {new Date(
+                    selectedSlotConflict.order.scheduledAt,
+                  ).toLocaleString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  })}{' '}
+                  trùng với khung giờ vừa chọn. Vui lòng chọn giờ khác.
+                </p>
               )}
             </div>
           </div>
@@ -238,7 +317,7 @@ export function RescheduleOrderModal({
               Quay lại
             </Button>
             <Button
-              disabled={!rescheduleSlot || rescheduleMutation.isPending}
+              disabled={!effectiveSlot || rescheduleMutation.isPending}
               onClick={handleSubmit}
               className='bg-primary hover:bg-primary/95 text-white rounded-xl text-xs font-bold px-5 h-9 cursor-pointer'
             >

@@ -45,6 +45,8 @@ import {
   PAYMENT_STATUS_META,
   PAYMENT_METHOD_LABEL,
   isCancellableByCustomer,
+  isReschedulableByCustomer,
+  MAX_CUSTOMER_RESCHEDULE,
   isSettledPayment,
 } from '@/constants';
 import { Order, OrderStatus, ServiceType } from '@/types/order';
@@ -237,6 +239,9 @@ export default function OrderDetailPage() {
     order.status === 'cancelled' || order.status === 'no_show';
   const doneIdx = lastDoneStep(order.status);
   const canModify = isCancellableByCustomer(order.status);
+  // Hết lượt đổi thì vẫn cho hủy, chỉ chặn đổi lịch - gửi lên BE cũng chỉ nhận
+  // 400 "Reschedule limit reached".
+  const canReschedule = isReschedulableByCustomer(order);
   // BE nói thẳng "không phải thu gì" qua `paymentStatus = no_payment_required`
   // (ưu đãi phủ hết đơn). Số tiền 0đ chỉ là dấu hiệu dự phòng.
   const isFree =
@@ -317,11 +322,19 @@ export default function OrderDetailPage() {
               <Button
                 size='sm'
                 variant='outline'
+                disabled={!canReschedule}
                 onClick={() => setIsRescheduling(true)}
                 className='rounded-xl text-xs font-semibold h-9 px-3.5 cursor-pointer'
               >
                 Đổi lịch
               </Button>
+              {/* Nút disabled có `pointer-events-none` nên tooltip `title`
+                  không bao giờ hiện - phải ghi lý do ra ngoài. */}
+              {!canReschedule && (
+                <span className='text-[10px] font-semibold text-warning'>
+                  Đã dùng hết {MAX_CUSTOMER_RESCHEDULE} lần đổi lịch
+                </span>
+              )}
               <Button
                 size='sm'
                 variant='outline'
@@ -443,7 +456,15 @@ export default function OrderDetailPage() {
           ) : null}
           <InfoRow label='Đặt lúc'>{formatDateTime(order.createdAt)}</InfoRow>
           {order.rescheduleCount > 0 && (
-            <InfoRow label='Số lần đổi lịch'>{order.rescheduleCount}</InfoRow>
+            <InfoRow label='Số lần đổi lịch'>
+              {order.rescheduleCount}/{MAX_CUSTOMER_RESCHEDULE}
+              {order.rescheduleCount >= MAX_CUSTOMER_RESCHEDULE && (
+                <span className='text-warning font-semibold'>
+                  {' '}
+                  · đã hết lượt đổi
+                </span>
+              )}
+            </InfoRow>
           )}
         </SectionCard>
 

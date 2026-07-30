@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSocketEvent } from '@/hooks/useSocketEvent';
@@ -37,13 +37,25 @@ import {
   useAvailableSlots,
   useCreateOrder,
   useMyLoyalty,
+  useMyOrders,
   usePreviewOrder,
 } from '@/hooks/orders/useOrders';
 import { cn } from '@/lib/utils';
 import { formatCurrency, toLocalDateKey } from '@/lib/format';
+import { getErrorMessage } from '@/lib/getErrorMessage';
+import {
+  activeOrderLimitMessage,
+  findVehicleBusyConflict,
+  getActiveOrderLimitReached,
+  getActiveOrders,
+  getVehicleBusyRanges,
+  SLOT_STEP_MINUTES,
+} from '@/lib/order-rules';
+import { MAX_ACTIVE_ORDERS } from '@/constants';
 import type {
   ServiceType as ServiceTypeBase,
   AvailableSlot,
+  Order,
 } from '@/types/order';
 import { useVouchers } from '@/hooks/vouchers/useVouchers';
 import { Voucher } from '@/types/voucher';
@@ -260,11 +272,39 @@ function BookingFlow() {
   const qc = useQueryClient();
   useSocketEvent('slots:changed', () => {
     void qc.invalidateQueries({ queryKey: ['available-slots'] });
+    // Đơn của chính khách này cũng có thể vừa đổi ở tab/thiết bị khác → tải lại
+    // để lưới giờ khoá đúng khung đã trùng lịch xe và hạn mức đơn khớp thực tế.
+    void qc.invalidateQueries({ queryKey: ['my-orders'] });
   });
 
   // Active Service Types
   const { data: serviceTypes = [], isLoading: isLoadingServices } =
     useActiveServiceTypes();
+
+  // ─── Hạn mức đơn đang hoạt động ───
+  // BE từ chối đơn thứ 4 bằng 400 ở bước tạo đơn (sau khi khách đã chọn xong
+  // xe/gói/giờ/thanh toán). Biết trước từ danh sách đơn nên báo ngay khi vào
+  // trang, và chặn không cho đi tiếp cho khỏi mất công.
+  const { data: myOrders = [], isLoading: isLoadingMyOrders } = useMyOrders();
+  const activeOrders = useMemo(
+    () => getActiveOrders(myOrders as Order[]),
+    [myOrders],
+  );
+  const isAtActiveOrderLimit =
+    !isLoadingMyOrders && activeOrders.length >= MAX_ACTIVE_ORDERS;
+  const activeLimitMessage = activeOrderLimitMessage();
+
+  const limitToastShown = useRef(false);
+  useEffect(() => {
+    if (!isAtActiveOrderLimit || limitToastShown.current) return;
+    limitToastShown.current = true;
+    const { title, description } = activeOrderLimitMessage();
+    toast.error(title, {
+      id: 'active-order-limit',
+      description,
+      duration: 8000,
+    });
+  }, [isAtActiveOrderLimit]);
 
   // Selected details helpers
   const selectedVehicle = useMemo(() => {
@@ -276,6 +316,19 @@ function BookingFlow() {
       (s: ServiceTypeItem) => (s._id || s.id) === selectedServiceId,
     );
   }, [serviceTypes, selectedServiceId]);
+
+  // Bảng giá của một dịch vụ cho loại xe đang chọn (BE: vehiclePricing).
+  // Là nguồn dữ liệu THẬT để biết dịch vụ có áp dụng cho loại xe này không.
+  const getVehiclePricing = useCallback(
+    (service: ServiceTypeItem) => {
+      const vtId = selectedVehicle?.vehicleTypeId;
+      if (!vtId) return undefined;
+      return service.vehiclePricing?.find(
+        (p) => p.vehicleTypeId === vtId && p.isActive !== false,
+      );
+    },
+    [selectedVehicle],
+  );
 
   // ─── Tiến độ voucher thưởng ───
   // Mốc số lượt rửa giờ do BE quyết định theo hạng thành viên
@@ -312,16 +365,82 @@ function BookingFlow() {
     ? (selectedService as ServiceTypeItem).isVoucherEligible !== false
     : true;
 
+  // ─── Chặn trước khung giờ trùng lịch của cùng chiếc xe ───
+  // BE từ chối bằng 409 khi xe đã có lịch rửa chồng lấn giờ vừa chọn. Thời lượng
+  // lấy theo bảng giá của loại xe (nguồn dữ liệu thật), fallback về thời lượng
+  // chung của dịch vụ rồi tới một bước lưới slot.
+  const selectedServiceMinutes = useMemo(() => {
+    if (!selectedService) return SLOT_STEP_MINUTES;
+    const minutes =
+      getVehiclePricing(selectedService)?.estimatedMinutes ??
+      selectedService.estimatedMinutes;
+    return Number(minutes) || SLOT_STEP_MINUTES;
+  }, [selectedService, getVehiclePricing]);
+
+  // Đơn cũ của xe có thể thuộc dịch vụ khác → tra thời lượng theo dịch vụ của
+  // chính đơn đó, vì cùng một xe nên vẫn dùng được bảng giá theo loại xe này.
+  const orderMinutes = useCallback(
+    (order: Order) => {
+      if (order.estimatedMinutes) return order.estimatedMinutes;
+      const service = serviceTypes.find(
+        (s: ServiceTypeItem) => (s._id || s.id) === order.serviceTypeId,
+      );
+      if (!service) return SLOT_STEP_MINUTES;
+      const minutes =
+        getVehiclePricing(service)?.estimatedMinutes ?? service.estimatedMinutes;
+      return Number(minutes) || SLOT_STEP_MINUTES;
+    },
+    [serviceTypes, getVehiclePricing],
+  );
+
+  const vehicleBusyRanges = useMemo(
+    () =>
+      getVehicleBusyRanges(myOrders as Order[], {
+        vehicleId: selectedVehicleId,
+        minutesOf: orderMinutes,
+      }),
+    [myOrders, selectedVehicleId, orderMinutes],
+  );
+
+  const hasBusySlot = useMemo(
+    () =>
+      vehicleBusyRanges.length > 0 &&
+      availableSlots.some((slot: AvailableSlot) =>
+        findVehicleBusyConflict(
+          slot.scheduledAt,
+          selectedServiceMinutes,
+          vehicleBusyRanges,
+        ),
+      ),
+    [availableSlots, selectedServiceMinutes, vehicleBusyRanges],
+  );
+
+  // Giờ đang chọn có thể thành trùng sau khi khách đổi xe/gói hoặc khi xe đó vừa
+  // có đơn mới (realtime). Suy ra thay vì reset state trong effect: lựa chọn
+  // trùng lịch coi như CHƯA chọn, nên không gửi được request chắc chắn bị 409.
+  const selectedSlotConflict = useMemo(
+    () =>
+      selectedSlot
+        ? findVehicleBusyConflict(
+            selectedSlot,
+            selectedServiceMinutes,
+            vehicleBusyRanges,
+          )
+        : undefined,
+    [selectedSlot, selectedServiceMinutes, vehicleBusyRanges],
+  );
+  const effectiveSlot = selectedSlotConflict ? '' : selectedSlot;
+
   const { data: preview } = usePreviewOrder({
     serviceTypeId: selectedServiceId,
     vehicleTypeId: selectedVehicle?.vehicleTypeId || '',
-    scheduledAt: selectedSlot,
+    scheduledAt: effectiveSlot,
     voucherId: selectedVoucherId || undefined,
     enabled:
       step === 4 &&
       !!selectedServiceId &&
       !!selectedVehicle?.vehicleTypeId &&
-      !!selectedSlot,
+      !!effectiveSlot,
   });
 
   const isFreeOrder = preview?.amount === 0;
@@ -329,19 +448,6 @@ function BookingFlow() {
   const effectivePaymentMethod: 'online' | 'cash' = isFreeOrder
     ? 'cash'
     : paymentMethod;
-
-  // Bảng giá của một dịch vụ cho loại xe đang chọn (BE: vehiclePricing).
-  // Là nguồn dữ liệu THẬT để biết dịch vụ có áp dụng cho loại xe này không.
-  const getVehiclePricing = useCallback(
-    (service: ServiceTypeItem) => {
-      const vtId = selectedVehicle?.vehicleTypeId;
-      if (!vtId) return undefined;
-      return service.vehiclePricing?.find(
-        (p) => p.vehicleTypeId === vtId && p.isActive !== false,
-      );
-    },
-    [selectedVehicle],
-  );
 
   // Chỉ hiện các dịch vụ có cấu hình giá cho loại xe đã chọn — khớp đúng với
   // điều BE chấp nhận, tránh khách chọn combo bị từ chối (400).
@@ -395,8 +501,24 @@ function BookingFlow() {
 
   // Submit flow
   const handleSubmitBooking = async () => {
-    if (!selectedVehicleId || !selectedServiceId || !selectedSlot) {
+    if (selectedSlotConflict) {
+      toast.error('Xe này đã có lịch rửa trùng với khung giờ bạn chọn.', {
+        description: 'Vui lòng chọn khung giờ khác hoặc hủy lịch cũ.',
+      });
+      setStep(3);
+      return;
+    }
+
+    if (!selectedVehicleId || !selectedServiceId || !effectiveSlot) {
       toast.error('Vui lòng hoàn tất đầy đủ các bước trước khi đặt!');
+      return;
+    }
+
+    if (isAtActiveOrderLimit) {
+      toast.error(activeLimitMessage.title, {
+        id: 'active-order-limit',
+        description: activeLimitMessage.description,
+      });
       return;
     }
 
@@ -404,7 +526,7 @@ function BookingFlow() {
       const order = await createOrderMutation.mutateAsync({
         vehicleId: selectedVehicleId,
         serviceTypeId: selectedServiceId,
-        scheduledAt: selectedSlot,
+        scheduledAt: effectiveSlot,
         paymentMethod: effectivePaymentMethod,
         note: note.trim() || undefined,
         voucherId: selectedVoucherId || undefined,
@@ -422,10 +544,21 @@ function BookingFlow() {
       }
     } catch (error) {
       console.error('Lỗi đặt lịch:', error);
-      toast.error(
-        (error as { response?: { data?: { message?: string } } }).response?.data
-          ?.message || 'Đặt lịch thất bại. Vui lòng thử lại!',
-      );
+      // Hai lỗi nghiệp vụ FE đã chặn trước nhưng BE vẫn có thể trả (đơn vừa được
+      // đặt ở tab khác, slot vừa bị người khác lấy): làm mới dữ liệu để lưới giờ
+      // và hạn mức khớp lại thực tế.
+      const limitReached = getActiveOrderLimitReached(error);
+      if (limitReached !== null) {
+        void qc.invalidateQueries({ queryKey: ['my-orders'] });
+        const { title, description } = activeOrderLimitMessage(limitReached);
+        toast.error(title, { id: 'active-order-limit', description });
+        return;
+      }
+      void qc.invalidateQueries({ queryKey: ['my-orders'] });
+      void qc.invalidateQueries({ queryKey: ['available-slots'] });
+      toast.error('Đặt lịch thất bại.', {
+        description: getErrorMessage(error),
+      });
     }
   };
 
@@ -545,6 +678,29 @@ function BookingFlow() {
 
         {/* Steps navigation */}
         {renderStepsIndicator()}
+
+        {/* Hết hạn mức đơn đang hoạt động — báo ngay đầu luồng, không để khách
+            chọn xong mọi thứ rồi mới bị BE từ chối ở bước tạo đơn. */}
+        {isAtActiveOrderLimit && (
+          <div className='mb-6 flex flex-col gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4 sm:flex-row sm:items-center'>
+            <AlertCircle className='w-5 h-5 shrink-0 text-warning' />
+            <div className='flex-1 space-y-0.5'>
+              <p className='text-sm font-semibold text-foreground'>
+                {activeLimitMessage.title}
+              </p>
+              <p className='text-xs text-muted-foreground'>
+                {activeLimitMessage.description}
+              </p>
+            </div>
+            <Button
+              variant='outline'
+              onClick={() => router.push('/profile/orders')}
+              className='shrink-0 cursor-pointer text-xs font-semibold'
+            >
+              Xem lịch hẹn của tôi
+            </Button>
+          </div>
+        )}
 
         {/* Main Step Wrapper */}
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 items-start'>
@@ -818,7 +974,7 @@ function BookingFlow() {
 
                     <div className='flex justify-end pt-4 border-t border-border'>
                       <Button
-                        disabled={!selectedVehicleId}
+                        disabled={!selectedVehicleId || isAtActiveOrderLimit}
                         onClick={() => setStep(2)}
                         className='px-6 cursor-pointer flex items-center gap-1.5'
                       >
@@ -1050,14 +1206,50 @@ function BookingFlow() {
                             Ô viền vàng là giờ vàng — đặt khung này được giảm
                             giá theo hạng thành viên.
                           </div>
+                          {hasBusySlot && (
+                            <div className='flex items-center gap-1.5 mb-3 text-[11px] text-muted-foreground'>
+                              <AlertCircle className='w-3.5 h-3.5 shrink-0 text-muted-foreground' />
+                              Ô ghi &quot;Trùng lịch&quot; là giờ xe này đã có
+                              lịch rửa khác — chọn giờ khác hoặc hủy lịch cũ.
+                            </div>
+                          )}
+                          {/* Giờ đang chọn vừa thành trùng (đổi xe/gói hoặc xe
+                              vừa có đơn mới) → nói rõ vì sao mất lựa chọn. */}
+                          {selectedSlotConflict && (
+                            <div className='flex items-center gap-1.5 mb-3 rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-[11px] text-foreground'>
+                              <AlertCircle className='w-3.5 h-3.5 shrink-0 text-warning' />
+                              Khung giờ bạn chọn đã trùng lịch rửa lúc{' '}
+                              {new Date(
+                                selectedSlotConflict.order.scheduledAt,
+                              ).toLocaleString('vi-VN', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              })}{' '}
+                              của xe này. Vui lòng chọn khung giờ khác.
+                            </div>
+                          )}
                           <div className='grid grid-cols-3 sm:grid-cols-4 gap-3'>
                             {availableSlots.map((slot: AvailableSlot) => {
                               const isSelected =
-                                slot.scheduledAt === selectedSlot;
+                                slot.scheduledAt === effectiveSlot;
                               const isFull = slot.remainingCapacity <= 0;
+                              // Xe này đã có lịch rửa chồng lấn khung giờ →
+                              // BE sẽ trả 409, disable trước cho khỏi mất công.
+                              const isBusy =
+                                !isFull &&
+                                !!findVehicleBusyConflict(
+                                  slot.scheduledAt,
+                                  selectedServiceMinutes,
+                                  vehicleBusyRanges,
+                                );
                               // Dùng cờ Giờ Vàng do BE trả về (nguồn dữ liệu thật),
                               // không tự suy theo khung giờ ở FE để tránh đánh dấu sai.
-                              const isGolden = slot.isGoldenHour && !isFull;
+                              const isGolden =
+                                slot.isGoldenHour && !isFull && !isBusy;
+                              const isDisabled = isFull || isBusy;
                               // Format time from ISO
                               const timeStr = new Date(
                                 slot.scheduledAt,
@@ -1071,7 +1263,7 @@ function BookingFlow() {
                                 <button
                                   key={slot.scheduledAt}
                                   type='button'
-                                  disabled={isFull}
+                                  disabled={isDisabled}
                                   onClick={() =>
                                     setSelectedSlot(slot.scheduledAt)
                                   }
@@ -1079,7 +1271,7 @@ function BookingFlow() {
                                     'p-3 rounded-lg border transition-colors cursor-pointer flex flex-col items-center justify-center relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                                     isSelected
                                       ? 'border-primary bg-accent ring-1 ring-primary'
-                                      : isFull
+                                      : isDisabled
                                         ? 'border-border bg-muted text-placeholder cursor-not-allowed'
                                         : isGolden
                                           ? 'border-warning/60 bg-warning/10 hover:bg-warning/20'
@@ -1097,13 +1289,20 @@ function BookingFlow() {
                                   <span
                                     className={cn(
                                       'font-semibold text-sm tracking-tight tabular-nums',
-                                      isFull
+                                      isDisabled
                                         ? 'text-placeholder'
                                         : 'text-foreground',
                                     )}
                                   >
                                     {timeStr}
                                   </span>
+                                  {/* Nút disabled có `pointer-events-none` nên
+                                      tooltip `title` không hiện — ghi lý do ra ô. */}
+                                  {isBusy && (
+                                    <span className='text-[9px] font-semibold text-placeholder mt-0.5 leading-none'>
+                                      Trùng lịch
+                                    </span>
+                                  )}
                                 </button>
                               );
                             })}
@@ -1121,7 +1320,7 @@ function BookingFlow() {
                         <ChevronLeft className='w-4 h-4' /> Quay lại
                       </Button>
                       <Button
-                        disabled={!selectedSlot}
+                        disabled={!effectiveSlot}
                         onClick={() => setStep(4)}
                         className='px-6 cursor-pointer flex items-center gap-1.5'
                       >
@@ -1398,7 +1597,9 @@ function BookingFlow() {
                       </Button>
                       <Button
                         onClick={handleSubmitBooking}
-                        disabled={createOrderMutation.isPending}
+                        disabled={
+                          createOrderMutation.isPending || isAtActiveOrderLimit
+                        }
                         className='px-7 cursor-pointer flex items-center gap-1.5'
                       >
                         {createOrderMutation.isPending ? (
@@ -1477,17 +1678,17 @@ function BookingFlow() {
                     <span className='text-[11px] text-muted-foreground block mb-0.5'>
                       Thời gian hẹn
                     </span>
-                    {selectedSlot ? (
+                    {effectiveSlot ? (
                       <div className='flex items-baseline justify-between gap-2'>
                         <span className='text-foreground font-medium tabular-nums'>
-                          {new Date(selectedSlot).toLocaleTimeString('vi-VN', {
+                          {new Date(effectiveSlot).toLocaleTimeString('vi-VN', {
                             hour: '2-digit',
                             minute: '2-digit',
                             hour12: false,
                           })}
                         </span>
                         <span className='text-xs text-muted-foreground tabular-nums'>
-                          {new Date(selectedSlot).toLocaleDateString('vi-VN', {
+                          {new Date(effectiveSlot).toLocaleDateString('vi-VN', {
                             weekday: 'long',
                             day: '2-digit',
                             month: '2-digit',
@@ -1520,7 +1721,7 @@ function BookingFlow() {
                         )
                       : 0;
                     const selectedSlotData = availableSlots.find(
-                      (s: AvailableSlot) => s.scheduledAt === selectedSlot,
+                      (s: AvailableSlot) => s.scheduledAt === effectiveSlot,
                     );
                     const localGoldenDiscount =
                       !preview &&
