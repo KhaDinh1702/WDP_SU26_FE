@@ -31,7 +31,9 @@ import {
   getRescheduleLimitReached,
   getVehicleBusyRanges,
 } from '@/lib/order-rules';
+import { FEEDBACK_RATING_LABEL } from '@/constants';
 import { Order, AvailableSlot } from '@/types/order';
+import type { Feedback } from '@/types/feedback';
 
 /** Xe của khách - shape tối thiểu các modal cần. */
 export interface CustomerVehicle {
@@ -493,8 +495,11 @@ export function FeedbackOrderModal({
   order: Order;
   washerName?: string;
   onClose: () => void;
-  /** Gọi sau khi gửi thành công - trang cha tự đánh dấu đã đánh giá. */
-  onDone?: () => void;
+  /**
+   * Gọi sau khi gửi thành công - trang cha tự đánh dấu đã đánh giá.
+   * Nhận luôn đánh giá BE vừa ghi để hiển thị ngay, khỏi đợi vòng GET mới.
+   */
+  onDone?: (feedback?: Feedback) => void;
 }) {
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -502,15 +507,17 @@ export function FeedbackOrderModal({
   const handleSubmit = async () => {
     toast.loading('Đang gửi đánh giá...');
     try {
-      await submitFeedback({
+      const res = await submitFeedback({
         orderId: order.id,
         rating: feedbackRating,
         comment: feedbackComment.trim() || undefined,
       });
+      const created: Feedback | undefined =
+        res.data?.data ?? res.data ?? undefined;
       toast.dismiss();
       toast.success('Cảm ơn bạn đã gửi đánh giá dịch vụ!');
       onClose();
-      onDone?.();
+      onDone?.(created);
     } catch (err) {
       toast.dismiss();
       console.error(err);
@@ -578,11 +585,7 @@ export function FeedbackOrderModal({
                 ))}
               </div>
               <span className='text-xs font-semibold text-foreground block'>
-                {feedbackRating === 5 && 'Rất hài lòng (5 sao)'}
-                {feedbackRating === 4 && 'Hài lòng (4 sao)'}
-                {feedbackRating === 3 && 'Bình thường (3 sao)'}
-                {feedbackRating === 2 && 'Không hài lòng (2 sao)'}
-                {feedbackRating === 1 && 'Rất tệ (1 sao)'}
+                {FEEDBACK_RATING_LABEL[feedbackRating]} ({feedbackRating} sao)
               </span>
             </div>
 

@@ -1,5 +1,7 @@
 /** Kiểu dữ liệu cho màn giám sát thợ + đánh giá của thợ. */
 
+import type { Feedback } from './feedback';
+
 export type WasherWorkStatus = 'free' | 'assigned' | 'in_progress';
 
 /** Phiếu rửa xe thợ đang phụ trách (BE WasherCurrentWorkOrder). */
@@ -27,22 +29,8 @@ export interface WasherLiveStatus {
   currentWorkOrder: WasherCurrentWorkOrder | null;
 }
 
-/** Một đánh giá của khách (BE FeedbackResponseDto). */
-export interface WasherFeedbackItem {
-  id: string;
-  orderId: string;
-  workOrderId: string;
-  workOrderCode?: string;
-  vehiclePlate?: string;
-  customerId: string;
-  customerName?: string;
-  washerId: string;
-  washerName?: string;
-  rating: number;
-  comment?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+/** Một đánh giá của khách (BE FeedbackResponseDto) - dùng chung với màn khách. */
+export type WasherFeedbackItem = Feedback;
 
 export interface WasherFeedbackList {
   data: WasherFeedbackItem[];

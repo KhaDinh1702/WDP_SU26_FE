@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Check,
@@ -10,10 +11,12 @@ import {
   Calendar,
   AlertCircle,
   Info,
+  MessageSquareText,
   Star,
   XCircle,
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -28,6 +31,8 @@ import {
 import {
   useMyOrderDetail,
   useActiveServiceTypes,
+  useMyOrderFeedback,
+  myOrderFeedbackKey,
 } from '@/hooks/orders/useOrders';
 import { getMyVehicles } from '@/lib/customer-api';
 import { useSocketEvent } from '@/hooks/useSocketEvent';
@@ -48,8 +53,10 @@ import {
   isReschedulableByCustomer,
   MAX_CUSTOMER_RESCHEDULE,
   isSettledPayment,
+  FEEDBACK_RATING_LABEL,
 } from '@/constants';
 import { Order, OrderStatus, ServiceType } from '@/types/order';
+import type { FeedbackEligibility } from '@/types/feedback';
 
 /** Các mốc của một lịch rửa xe suôn sẻ, theo đúng state machine BE. */
 const TIMELINE_STEPS = [
@@ -112,6 +119,25 @@ function InfoRow({
   );
 }
 
+/** Dãy 5 sao, tô vàng tới mức điểm đã chấm. */
+function Stars({ rating }: { rating: number }) {
+  return (
+    <span className='inline-flex items-center gap-0.5'>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Star
+          key={star}
+          className={cn(
+            'w-4 h-4',
+            star <= rating
+              ? 'fill-warning text-warning'
+              : 'fill-muted text-muted',
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
 function SectionCard({
   title,
   children,
@@ -146,6 +172,18 @@ export default function OrderDetailPage() {
 
   const { data: serviceTypes = [] } = useActiveServiceTypes();
   const [vehicles, setVehicles] = useState<CustomerVehicle[]>([]);
+  const queryClient = useQueryClient();
+
+  // Nội dung nhận xét chỉ có ở `/me/feedback/:orderId`; đơn chỉ mang số sao.
+  // Chỉ hỏi khi đơn có dính tới đánh giá để đơn đang chờ khỏi gọi thừa.
+  const {
+    data: feedbackInfo,
+    isLoading: isLoadingFeedback,
+    refetch: refetchFeedback,
+  } = useMyOrderFeedback(
+    orderId,
+    order?.canRate === true || order?.alreadyRated === true,
+  );
 
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -258,9 +296,15 @@ export default function OrderDetailPage() {
     service?.estimatedMinutes;
 
   // BE quyết định đơn có được chấm điểm hay không, không suy từ trạng thái đơn.
+  const feedback = feedbackInfo?.feedback ?? null;
   const alreadyRated =
-    order.alreadyRated === true || !!submittedFeedbacks[order.id];
+    order.alreadyRated === true ||
+    feedbackInfo?.alreadyRated === true ||
+    !!feedback ||
+    !!submittedFeedbacks[order.id];
   const canRate = order.canRate === true && !alreadyRated;
+  // Đơn cũ (đánh giá trước khi có API chi tiết) chỉ còn số sao trong `orderRating`.
+  const feedbackRating = feedback?.rating ?? order.orderRating ?? 0;
 
   const timeStr = new Date(order.scheduledAt).toLocaleTimeString('vi-VN', {
     hour: '2-digit',
@@ -602,13 +646,62 @@ export default function OrderDetailPage() {
         />
       )}
 
-      {/* Đã đánh giá */}
+      {/* Đánh giá khách đã gửi cho lịch hẹn này */}
       {alreadyRated && (
-        <p className='text-xs font-semibold text-success inline-flex items-center gap-1.5'>
-          <CheckCircle className='w-4 h-4' /> Bạn đã đánh giá lịch rửa xe này
-          {typeof order.orderRating === 'number' && ` ${order.orderRating}★`}.
-          Cảm ơn bạn!
-        </p>
+        <SectionCard title='Đánh giá của bạn'>
+          {isLoadingFeedback && !feedback ? (
+            <div className='space-y-2 py-0.5'>
+              <Skeleton className='h-5 w-44 rounded-md' />
+              <Skeleton className='h-4 w-2/3 rounded-md' />
+            </div>
+          ) : (
+            <div className='space-y-2'>
+              <div className='flex flex-wrap items-center gap-2'>
+                {feedbackRating > 0 && (
+                  <>
+                    <Stars rating={feedbackRating} />
+                    <span className='text-xs font-bold text-foreground'>
+                      {feedbackRating}/5
+                      {FEEDBACK_RATING_LABEL[feedbackRating]
+                        ? ` · ${FEEDBACK_RATING_LABEL[feedbackRating]}`
+                        : ''}
+                    </span>
+                  </>
+                )}
+                <span className='inline-flex items-center gap-1 text-[11px] font-semibold text-success'>
+                  <CheckCircle className='w-3.5 h-3.5' /> Đã gửi đánh giá
+                </span>
+              </div>
+
+              {/* Chỉ nói "không có nhận xét" khi thật sự đọc được đánh giá -
+                  gọi API hỏng thì im lặng, đừng khẳng định thay khách. */}
+              {feedback &&
+                (feedback.comment ? (
+                  <p className='text-xs text-muted-foreground flex items-start gap-2'>
+                    <MessageSquareText className='w-4 h-4 text-primary shrink-0' />
+                    {feedback.comment}
+                  </p>
+                ) : (
+                  <p className='text-xs text-placeholder'>
+                    Bạn không để lại nhận xét cho lần rửa xe này.
+                  </p>
+                ))}
+
+              {feedback && (
+                <p className='text-[11px] text-placeholder'>
+                  Gửi lúc {formatDateTime(feedback.createdAt)}
+                  {feedback.washerName || order.assignedWasherName
+                    ? ` · Thợ ${feedback.washerName || order.assignedWasherName}`
+                    : ''}
+                </p>
+              )}
+
+              <p className='text-xs font-semibold text-success'>
+                Cảm ơn bạn đã dành thời gian đánh giá!
+              </p>
+            </div>
+          )}
+        </SectionCard>
       )}
 
       {/* Đặt lại dịch vụ sau khi kết thúc */}
@@ -646,13 +739,24 @@ export default function OrderDetailPage() {
           order={order}
           washerName={order.assignedWasherName}
           onClose={() => setIsFeedbacking(false)}
-          onDone={() => {
+          onDone={(created) => {
             const updated = { ...submittedFeedbacks, [order.id]: true };
             setSubmittedFeedbacks(updated);
             localStorage.setItem(
               'wave_submitted_feedbacks',
               JSON.stringify(updated),
             );
+            // Hiện ngay đánh giá vừa gửi; nếu BE không trả kèm thì hỏi lại.
+            if (created) {
+              queryClient.setQueryData<FeedbackEligibility>(
+                myOrderFeedbackKey(order.id),
+                { eligible: false, alreadyRated: true, feedback: created },
+              );
+            } else {
+              refetchFeedback();
+            }
+            // Đơn mang `alreadyRated`/`orderRating` nên phải lấy lại bản mới.
+            refetch();
           }}
         />
       )}
