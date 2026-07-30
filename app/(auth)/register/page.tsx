@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const route = useRouter();
   const register = useRegister();
   const setAccessToken = useAuthStore((s) => s.setAccessToken);
+  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
   const setUser = useAuthStore((s) => s.setUser);
 
   const handleSubmit = async (data: RegisterFormData): Promise<void> => {
@@ -29,6 +30,9 @@ export default function RegisterPage() {
 
         if (token && user) {
           setAccessToken(token);
+          // Lưu luôn refreshToken, nếu không phiên đăng ký sẽ không refresh
+          // được và lúc đăng xuất không có token để BE thu hồi.
+          setRefreshToken(authData?.refreshToken ?? null);
           setUser(user);
           toast.success('Đăng ký và đăng nhập thành công!');
           route.replace('/');

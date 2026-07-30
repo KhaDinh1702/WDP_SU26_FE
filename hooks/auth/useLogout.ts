@@ -14,9 +14,14 @@ export const useLogout = () => {
     async (redirectTo: string = '/') => {
       const { refreshToken } = useAuthStore.getState();
       try {
-        await axiosInstance.post(ENDPOINTS.auth.logout, { refreshToken });
+        // BE validate refreshToken phải là JWT không rỗng -> gọi API chỉ khi
+        // thực sự có token. Phiên cũ (đăng nhập trước khi FE lưu refreshToken)
+        // hoặc đăng ký xong chưa có token thì bỏ qua, tránh 400 Bad Request.
+        if (refreshToken) {
+          await axiosInstance.post(ENDPOINTS.auth.logout, { refreshToken });
+        }
       } catch {
-        // ignore
+        // BE lỗi vẫn phải xoá phiên phía client.
       } finally {
         setAccessToken(null);
         setRefreshToken(null);
