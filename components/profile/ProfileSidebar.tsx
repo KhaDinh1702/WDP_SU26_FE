@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/format';
@@ -61,6 +62,7 @@ const menuGroups: {
 export default function ProfileSidebar() {
   const authUser = useAuthStore((s) => s.authUser);
   const pathname = usePathname();
+  const [imgError, setImgError] = useState(false);
 
   const initials = getInitials(authUser?.name);
 
@@ -77,11 +79,12 @@ export default function ProfileSidebar() {
   const userSummary = (
     <div className='flex min-w-0 items-center gap-3'>
       <div className='flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/10 bg-primary/10 font-bold text-primary'>
-        {authUser?.avatarUrl ? (
+        {authUser?.avatarUrl && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={authUser.avatarUrl}
             alt={authUser.name}
+            onError={() => setImgError(true)}
             className='h-full w-full object-cover'
           />
         ) : (

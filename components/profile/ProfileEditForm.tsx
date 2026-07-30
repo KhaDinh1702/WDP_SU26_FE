@@ -43,6 +43,7 @@ export function ProfileEditForm({
   );
   const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? '');
   const [isUploading, setIsUploading] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   const mutation = useMutation({
     mutationFn: updateMyProfile,
@@ -91,11 +92,12 @@ export function ProfileEditForm({
       <div className='flex items-center gap-4'>
         <div className='relative'>
           <div className='flex size-16 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-lg font-bold text-primary'>
-            {avatarUrl ? (
+            {avatarUrl && !imgError ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={avatarUrl}
                 alt='Ảnh đại diện'
+                onError={() => setImgError(true)}
                 className='size-full object-cover'
               />
             ) : (

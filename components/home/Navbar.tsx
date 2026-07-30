@@ -45,6 +45,7 @@ export function Navbar() {
   const authUser = useAuthStore((s) => s.authUser);
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const handleLogout = useLogout();
 
   // Dùng chung hook (và cache) với trang loyalty nên không gọi API thừa và
@@ -119,12 +120,14 @@ export function Navbar() {
                           tierMeta.gradientClass,
                         )}
                       >
-                        {authUser.avatarUrl ? (
+                        {authUser.avatarUrl && !imgError ? (
                           <div className='relative w-8 h-8'>
                             <Image
                               src={authUser.avatarUrl}
                               alt={authUser.name}
                               fill
+                              sizes='32px'
+                              onError={() => setImgError(true)}
                               className='rounded-full object-cover border-2 border-background'
                             />
                           </div>
