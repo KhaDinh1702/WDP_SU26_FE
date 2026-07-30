@@ -73,7 +73,10 @@ export function RescheduleOrderModal({
       current.setDate(today.getDate() + i);
       const val = toLocalDateKey(current);
       const lbl =
-        current.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) +
+        current.toLocaleDateString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+        }) +
         ' (' +
         (i === 0
           ? 'Hôm nay'
@@ -88,7 +91,13 @@ export function RescheduleOrderModal({
 
   const slotQueryParams = useMemo(() => {
     if (!rescheduleDate) {
-      return { serviceTypeId: '', vehicleTypeId: '', from: '', to: '', enabled: false };
+      return {
+        serviceTypeId: '',
+        vehicleTypeId: '',
+        from: '',
+        to: '',
+        enabled: false,
+      };
     }
     const vehicle = vehicles.find((v) => (v._id || v.id) === order.vehicleId);
     return {
@@ -118,6 +127,12 @@ export function RescheduleOrderModal({
     [myOrders, order],
   );
 
+  // Chọn lại đúng giờ đang hẹn thì không phải là đổi lịch — khoá luôn ô đó cho
+  // khách khỏi phân vân (và khỏi tốn một lượt đổi vào một request vô nghĩa).
+  const currentSlotMs = new Date(order.scheduledAt).getTime();
+  const isCurrentSlot = (slotIso: string) =>
+    new Date(slotIso).getTime() === currentSlotMs;
+
   const selectedSlotConflict = rescheduleSlot
     ? findVehicleBusyConflict(
         rescheduleSlot,
@@ -125,7 +140,20 @@ export function RescheduleOrderModal({
         vehicleBusyRanges,
       )
     : undefined;
-  const effectiveSlot = selectedSlotConflict ? '' : rescheduleSlot;
+  const effectiveSlot =
+    selectedSlotConflict || (rescheduleSlot && isCurrentSlot(rescheduleSlot))
+      ? ''
+      : rescheduleSlot;
+
+  // Lưới giờ có thể cuộn nên ô đang chọn hay bị khuất — nhắc lại giờ mới ngay
+  // cạnh lịch cũ để khách luôn thấy mình đang đổi sang khung nào.
+  const selectedSlotLabel = effectiveSlot
+    ? `${new Date(effectiveSlot).toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })} ngày ${new Date(effectiveSlot).toLocaleDateString('vi-VN')}`
+    : '';
 
   const handleSubmit = async () => {
     if (!effectiveSlot) return;
@@ -181,9 +209,6 @@ export function RescheduleOrderModal({
 
           <div className='space-y-4'>
             <div className='bg-muted/40 p-3 rounded-xl border border-border space-y-1'>
-              <span className='text-[10px] text-muted-foreground font-bold uppercase block'>
-                Lịch hẹn đang đổi
-              </span>
               <span className='font-semibold text-sm text-foreground block'>
                 {serviceName}
               </span>
@@ -194,6 +219,14 @@ export function RescheduleOrderModal({
                   minute: '2-digit',
                 })}{' '}
                 ngày {new Date(order.scheduledAt).toLocaleDateString('vi-VN')}
+              </span>
+              <span
+                className={cn(
+                  'text-[10px] font-semibold block',
+                  selectedSlotLabel ? 'text-primary' : 'text-placeholder',
+                )}
+              >
+                Lịch mới: {selectedSlotLabel || 'Chưa chọn giờ mới'}
               </span>
             </div>
 
@@ -210,7 +243,10 @@ export function RescheduleOrderModal({
                 className='w-full h-10 px-3 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/20'
               >
                 {dateOptions.map((d) => (
-                  <option key={d.value} value={d.value}>
+                  <option
+                    key={d.value}
+                    value={d.value}
+                  >
                     {d.label}
                   </option>
                 ))}
@@ -234,20 +270,27 @@ export function RescheduleOrderModal({
                 <div className='grid grid-cols-3 sm:grid-cols-4 gap-2.5 max-h-40 overflow-y-auto pr-1'>
                   {availableSlots.map((slot: AvailableSlot) => {
                     const isSelected = slot.scheduledAt === effectiveSlot;
-                    const isFull = slot.remainingCapacity <= 0;
+                    // Giờ đơn đang hẹn — khoá trước cả các lý do khác vì với
+                    // khách nó là "lịch hiện tại", không phải ô hết chỗ/trùng.
+                    const isCurrent = isCurrentSlot(slot.scheduledAt);
+                    const isFull = !isCurrent && slot.remainingCapacity <= 0;
                     // Xe này đã có lịch rửa chồng lấn giờ đó → BE trả 409.
                     const isBusy =
+                      !isCurrent &&
                       !isFull &&
                       !!findVehicleBusyConflict(
                         slot.scheduledAt,
                         order.estimatedMinutes,
                         vehicleBusyRanges,
                       );
-                    const isDisabled = isFull || isBusy;
-                    const timeStr = new Date(slot.scheduledAt).toLocaleTimeString(
-                      'vi-VN',
-                      { hour: '2-digit', minute: '2-digit', hour12: false },
-                    );
+                    const isDisabled = isCurrent || isFull || isBusy;
+                    const timeStr = new Date(
+                      slot.scheduledAt,
+                    ).toLocaleTimeString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    });
                     return (
                       <button
                         key={slot.scheduledAt}
@@ -257,7 +300,7 @@ export function RescheduleOrderModal({
                         className={cn(
                           'p-2.5 rounded-xl border-2 transition-all text-center cursor-pointer focus:outline-none flex flex-col items-center justify-center',
                           isSelected
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                            ? 'border-primary bg-accent ring-1 ring-primary'
                             : isDisabled
                               ? 'border-border bg-muted text-placeholder cursor-not-allowed'
                               : 'border-border bg-card hover:bg-muted/50',
@@ -265,8 +308,12 @@ export function RescheduleOrderModal({
                       >
                         <span
                           className={cn(
-                            'font-semibold text-xs',
-                            isDisabled ? 'text-placeholder' : 'text-foreground',
+                            'font-semibold text-xs tabular-nums',
+                            isSelected
+                              ? 'text-primary'
+                              : isDisabled
+                                ? 'text-placeholder'
+                                : 'text-foreground',
                           )}
                         >
                           {timeStr}
@@ -276,12 +323,16 @@ export function RescheduleOrderModal({
                         <span
                           className={cn(
                             'text-[8px] font-bold mt-0.5',
-                            isBusy ? 'text-placeholder' : 'text-success',
+                            isCurrent || isBusy
+                              ? 'text-placeholder'
+                              : 'text-success',
                           )}
                         >
-                          {isBusy
-                            ? 'Trùng lịch'
-                            : `Trống ${slot.remainingCapacity}`}
+                          {isCurrent
+                            ? 'Lịch hiện tại'
+                            : isBusy
+                              ? 'Trùng lịch'
+                              : `Trống ${slot.remainingCapacity}`}
                         </span>
                       </button>
                     );
